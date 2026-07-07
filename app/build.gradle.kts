@@ -35,8 +35,16 @@ android {
 
     buildFeatures { compose = true }
 
-    // Robolectric needs the merged Android resources on the unit-test classpath.
-    testOptions { unitTests { isIncludeAndroidResources = true } }
+    // Robolectric needs the merged Android resources; isReturnDefaultValues lets
+    // the NON-Robolectric pure-JVM tests call android.util.Log (used by
+    // SessionManager/SessionController) without a "not mocked" RuntimeException
+    // — un-mocked android.* calls return 0/null instead of throwing.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
     // The Compose Compiler version is now governed by the
     // org.jetbrains.kotlin.plugin.compose plugin (pinned to the Kotlin
     // version in the root build), so no manual composeOptions is needed.
