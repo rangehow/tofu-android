@@ -1,0 +1,102 @@
+package com.tofu.client.ui
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.tofu.client.data.AuthType
+import com.tofu.client.data.Profile
+import com.tofu.client.data.ProfileDao
+import com.tofu.client.session.LoginResult
+import com.tofu.client.session.SecretVault
+import com.tofu.client.session.SessionController
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+/** What the host UI is currently showing. */
+sealed interface Screen {
+    data object List : Screen
+    data object AddEdit : Screen
+    data class Web(val profile: Profile) : Screen
+}
+
+/** A transient status the UI surfaces (login progress / errors / SSO hand-off). */
+sealed interface UiStatus {
+    data object Idle : UiStatus
+    data class LoggingIn(val alias: String) : UiStatus
+    data class Error(val message: String) : UiStatus
+    data class NeedsSso(val url: String, val profile: Profile) : UiStatus
+    data class BadCredentials(val profile: Profile) : UiStatus
+}
+
+/**
+ * Holds the reactive profile list + navigation/status state, and delegates all
+ * mutations to [SessionController]. Kept dumb: no session logic lives here (it's
+ * all in the tested controller), so the ViewModel is just wiring + state.
+ */
+class ProfilesViewModel(
+    private val dao: ProfileDao,
+    private val secrets: SecretVault,
+    private val controller: SessionController,
+) : ViewModel() {
+
+    val profiles: StateFlow<List<Profile>> =
+        dao.observeAll().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val _screen = MutableStateFlow<Screen>(Screen.List)
+    val screen: StateFlow<Screen> = _screen
+
+    private val _status = MutableStateFlow<UiStatus>(UiStatus.Idle)
+    val status: StateFlow<UiStatus> = _status
+
+    /** The profile currently being edited (null = adding a new one). */
+    var editing: Profile? = null
+        private set
+
+    fun startAdd() { editing = null; _screen.value = Screen.AddEdit }
+    fun startEdit(p: Profile) { editing = p; _screen.value = Screen.AddEdit }
+    fun backToList() { _screen.value = Screen.List; _status.value = UiStatus.Idle }
+
+    fun secretStoredFor(alias: String): Boolean = secrets.secretFor(alias) != null
+
+    fun activate(profile: Profile) {
+        _status.value = UiStatus.LoggingIn(profile.alias)
+        viewModelScope.launch {
+            handleLogin(controller.activate(profile), profile)
+        }
+    }
+
+    fun submitAdd(alias: String, url: String, auth: AuthType, secret: String) {
+        _status.value = UiStatus.LoggingIn(alias)
+        viewModelScope.launch {
+            when (val r = controller.addProfile(alias, url, auth, secret)) {
+                is SessionController.AddResult.DuplicateAlias ->
+                    _status.value = UiStatus.Error("A server named \"$alias\" already exists")
+                is SessionController.AddResult.Added -> handleLogin(r.login, r.profile)
+            }
+        }
+    }
+
+    fun submitEdit(current: Profile, alias: String, url: String, auth: AuthType, secret: String) {
+        _status.value = UiStatus.LoggingIn(alias)
+        viewModelScope.launch {
+            val updated = current.copy(alias = alias, baseUrl = url, authType = auth)
+            handleLogin(controller.editProfile(current, alias, url, auth, secret), updated)
+        }
+    }
+
+    fun deleteProfile(profile: Profile) {
+        viewModelScope.launch { controller.deleteProfile(profile) }
+    }
+
+    private fun handleLogin(result: LoginResult, profile: Profile) {
+        _status.value = when (result) {
+            is LoginResult.Success -> { _screen.value = Screen.Web(profile); UiStatus.Idle }
+            is LoginResult.NeedsInteractiveSso -> UiStatus.NeedsSso(result.url, profile)
+            is LoginResult.BadCredentials -> UiStatus.BadCredentials(profile)
+            is LoginResult.NoCredential -> UiStatus.BadCredentials(profile)
+            is LoginResult.Error -> UiStatus.Error(result.message)
+        }
+    }
+}
