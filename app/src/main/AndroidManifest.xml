@@ -9,7 +9,7 @@
         android:label="Tofu"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+        android:theme="@style/Theme.TofuClient">
 
         <activity
             android:name=".MainActivity"
