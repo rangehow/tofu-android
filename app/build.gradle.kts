@@ -34,6 +34,9 @@ android {
     kotlinOptions { jvmTarget = "17" }
 
     buildFeatures { compose = true }
+
+    // Robolectric needs the merged Android resources on the unit-test classpath.
+    testOptions { unitTests { isIncludeAndroidResources = true } }
     // The Compose Compiler version is now governed by the
     // org.jetbrains.kotlin.plugin.compose plugin (pinned to the Kotlin
     // version in the root build), so no manual composeOptions is needed.
@@ -70,4 +73,8 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // Robolectric tier (CookieBridge shadow-CookieManager + reauth latch).
+    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("androidx.test:core:1.5.0")
+    testImplementation("androidx.test.ext:junit:1.1.5")
 }
