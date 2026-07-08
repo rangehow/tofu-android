@@ -1,6 +1,9 @@
 package com.tofu.client.session
 
+import android.os.Build
 import android.util.Log
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -26,6 +29,13 @@ import com.tofu.client.data.Profile
 class ReauthWebViewClient(
     private val profile: Profile,
     private val onReauth: (WebView) -> Unit,
+    /**
+     * Invoked when the WebView's RENDERER PROCESS dies (crash or low-memory
+     * kill) — the classic "blank page after load" cause on a memory-constrained
+     * device rendering a heavy page. The host decides recovery (e.g. drop back
+     * to the profile list) instead of leaving a dead blank WebView on screen.
+     */
+    private val onRendererGone: ((crashed: Boolean) -> Unit)? = null,
 ) : WebViewClient() {
 
     @Volatile private var reauthInFlight = false
@@ -37,6 +47,41 @@ class ReauthWebViewClient(
     ) {
         if (request.isForMainFrame && errorResponse.statusCode == 401) {
             trigger(view, "401 on main frame")
+        }
+    }
+
+    /**
+     * The renderer process died. If [detail.didCrash] is false it was killed by
+     * the OS (usually low memory) — common when a WebView renders a very large
+     * page on a constrained device. Returning true tells the framework we
+     * HANDLED it, so the host app is NOT killed; we then hand off to recovery.
+     * Without this override, a renderer death leaves a permanently blank WebView.
+     */
+    override fun onRenderProcessGone(
+        view: WebView?,
+        detail: RenderProcessGoneDetail?,
+    ): Boolean {
+        val crashed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            detail?.didCrash() ?: false else false
+        Log.e(TAG, "RENDERER GONE (${profile.alias}) didCrash=$crashed — " +
+            "likely OOM/crash rendering a heavy page; recovering")
+        onRendererGone?.invoke(crashed)
+        return true
+    }
+
+    /** Log main-frame load failures (blank-page diagnostics). */
+    override fun onReceivedError(
+        view: WebView,
+        request: WebResourceRequest,
+        error: WebResourceError,
+    ) {
+        if (request.isForMainFrame) {
+            val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                error.errorCode else -1
+            val desc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                error.description?.toString() else null
+            Log.e(TAG, "main-frame load error (${profile.alias}) code=$code " +
+                "desc=$desc url=${request.url}")
         }
     }
 

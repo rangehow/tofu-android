@@ -1,6 +1,9 @@
 package com.tofu.client.ui
 
+import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -52,21 +55,54 @@ fun WebScreen(
             factory = { ctx ->
                 WebView(ctx).apply {
                     webRef[0] = this
+                    // Remote-debuggable: with the app foregrounded, open
+                    // chrome://inspect on a connected desktop to see the live
+                    // DOM + console of this WebView. Safe to leave on for a
+                    // self-hosted tool; it's the fastest way to diagnose a
+                    // blank/again render without shipping a new build each time.
+                    WebView.setWebContentsDebuggingEnabled(true)
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true        // Tofu uses localStorage/IndexedDB
                     settings.databaseEnabled = true
+                    // Larger page rendering headroom on constrained WebView
+                    // renderers (the Tofu SPA can restore a very large last
+                    // conversation on boot).
+                    settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
                     val cm = CookieManager.getInstance()
                     cm.setAcceptCookie(true)
                     cm.setAcceptThirdPartyCookies(this, true) // gateway host != Tofu host
 
-                    val client = ReauthWebViewClient(profile) { view ->
-                        // Off-UI re-auth; reload on success, always settle the latch.
-                        scope.launch(Dispatchers.Main) {
-                            val result = session.login(profile)
-                            if (result is LoginResult.Success) view.reload()
-                            (view.webViewClient as? ReauthWebViewClient)?.reauthSettled()
+                    // Surface JS console output (incl. uncaught errors) to
+                    // logcat — turns a silent blank page into a concrete cause.
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onConsoleMessage(m: ConsoleMessage): Boolean {
+                            Log.i(
+                                "TofuWebConsole",
+                                "[${m.messageLevel()}] ${m.message()} " +
+                                    "(${m.sourceId()}:${m.lineNumber()})",
+                            )
+                            return true
                         }
                     }
+
+                    val client = ReauthWebViewClient(
+                        profile,
+                        onReauth = { view ->
+                            // Off-UI re-auth; reload on success, always settle the latch.
+                            scope.launch(Dispatchers.Main) {
+                                val result = session.login(profile)
+                                if (result is LoginResult.Success) view.reload()
+                                (view.webViewClient as? ReauthWebViewClient)?.reauthSettled()
+                            }
+                        },
+                        onRendererGone = { crashed ->
+                            // The renderer died (crash / OOM kill) → the page is
+                            // now a dead blank surface. Return to the profile
+                            // list rather than stranding the user on blank.
+                            Log.e("TofuWebScreen", "renderer gone (crashed=$crashed) → back to list")
+                            scope.launch(Dispatchers.Main) { onBack() }
+                        },
+                    )
                     webViewClient = client
                     loadUrl(profile.baseUrl)
                 }
