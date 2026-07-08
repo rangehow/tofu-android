@@ -17,7 +17,27 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        // A FIXED, committed debug keystore (Android's standard
+        // android/androiddebugkey convention) so every build — local AND CI —
+        // is signed with the SAME key. Without this, GitHub runners generate a
+        // fresh throwaway debug key per build, changing the signature, and
+        // Android then refuses to install the update over an existing install
+        // (INSTALL_FAILED_UPDATE_INCOMPATIBLE / "App not installed") — forcing
+        // an uninstall each time. A debug keystore is NOT a secret; committing
+        // it is standard practice for a team-shared test build.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
