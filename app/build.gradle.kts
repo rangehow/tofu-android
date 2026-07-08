@@ -99,6 +99,9 @@ dependencies {
     // ── WebView (androidx variant, cookie APIs) ──
     implementation("androidx.webkit:webkit:1.11.0")
 
+    // ── Pull-to-refresh around the WebView (recovery from a bad page state) ──
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     // Robolectric tier (CookieBridge shadow-CookieManager + reauth latch).

@@ -50,7 +50,12 @@ fun WebScreen(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                WebView(ctx).apply {
+                // Pull-to-refresh wrapper: if the page ever lands in a bad state
+                // the user can swipe down to reload it, instead of the only
+                // recovery being force-killing the app.
+                val swipe = androidx.swiperefreshlayout.widget.SwipeRefreshLayout(ctx)
+
+                val webView = WebView(ctx).apply {
                     webRef[0] = this
                     // Remote-debuggable via chrome://inspect on a connected
                     // desktop — safe to leave on for a self-hosted tool.
@@ -89,10 +94,20 @@ fun WebScreen(
                             // blank surface; return to the profile list.
                             scope.launch(Dispatchers.Main) { onBack() }
                         },
+                        // Stop the refresh spinner once the page settles.
+                        onPageDone = { swipe.isRefreshing = false },
                     )
                     webViewClient = client
                     loadUrl(profile.baseUrl)
                 }
+
+                swipe.addView(webView)
+                swipe.setOnRefreshListener { webView.reload() }
+                // Only arm the pull gesture at the very top of the page, so a
+                // swipe-down while scrolled into the chat scrolls normally
+                // instead of triggering a reload.
+                swipe.setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 }
+                swipe
             },
         )
     }
