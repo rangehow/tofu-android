@@ -57,7 +57,7 @@ class CookieBridgeRobolectricTest {
             authType = AuthType.CODE_SERVER_PASSWORD,
         )
         var reauthCalls = 0
-        val client = ReauthWebViewClient(profile) { reauthCalls++ }
+        val client = ReauthWebViewClient(profile, onReauth = { reauthCalls++ })
         val webView = android.webkit.WebView(
             org.robolectric.RuntimeEnvironment.getApplication()
         )
