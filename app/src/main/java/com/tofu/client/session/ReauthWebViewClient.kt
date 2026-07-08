@@ -36,61 +36,17 @@ class ReauthWebViewClient(
      * to the profile list) instead of leaving a dead blank WebView on screen.
      */
     private val onRendererGone: ((crashed: Boolean) -> Unit)? = null,
-    /** Optional sink for human-readable diagnostics shown in the on-screen log. */
-    private val onDiag: ((String) -> Unit)? = null,
 ) : WebViewClient() {
 
     @Volatile private var reauthInFlight = false
-
-    /**
-     * After the page settles, probe the DECISIVE layout facts and report them to
-     * the on-screen log: viewport width, pointer:coarse, the tablet-drawer media
-     * query, and the computed size/visibility of the sidebar + main containers.
-     * This distinguishes "content never rendered" from "rendered then hidden"
-     * (e.g. the responsive drawer collapsing the sidebar) without needing
-     * desktop DevTools. Re-probes at +1.5s to catch a post-paint hide.
-     */
-    override fun onPageFinished(view: WebView, url: String?) {
-        val js = """(function(){try{
-          var q=function(sel,el){el=el||document.querySelector(sel);
-            if(!el)return sel+'=<none>';
-            var r=el.getBoundingClientRect();var st=getComputedStyle(el);
-            return sel+' h='+Math.round(r.height)+' disp='+st.display+
-              ' flex='+st.flexGrow+'/'+st.flexShrink+'/'+st.flexBasis+
-              ' minH='+st.minHeight+' H='+st.height+' pos='+st.position+
-              ' ovf='+st.overflowY;};
-          // Walk the real ancestor chain of the chat container up to <html>,
-          // so we see EXACTLY which element in the flex height-chain zeroes out.
-          var chain=[];var el=document.querySelector('#chatContainer');
-          for(var i=0;i<7 && el;i++){
-            var tag=el.id?('#'+el.id):(el.tagName.toLowerCase()+
-              (el.className&&typeof el.className=='string'?'.'+el.className.trim().split(/\s+/)[0]:''));
-            chain.push(q(tag,el));el=el.parentElement;}
-          return 'PROBE2 iw='+window.innerWidth+' ih='+window.innerHeight+
-            ' coarse='+matchMedia('(pointer:coarse)').matches+
-            ' drawerMQ='+matchMedia('(max-width:1024px) and (pointer:coarse)').matches+
-            ' theme='+(document.documentElement.getAttribute('data-theme'))+
-            ' || '+chain.join(' || ');
-        }catch(e){return 'PROBE-ERR '+e;}})();"""
-        view.evaluateJavascript(js) { result ->
-            onDiag?.invoke("· " + (result ?: "").trim('"').replace("\\\"", "\""))
-        }
-        // Re-probe after 1.5s to catch a hide that happens shortly AFTER paint.
-        view.postDelayed({
-            view.evaluateJavascript(js) { result ->
-                onDiag?.invoke("· (+1.5s) " + (result ?: "").trim('"').replace("\\\"", "\""))
-            }
-        }, 1500)
-    }
 
     override fun onReceivedHttpError(
         view: WebView,
         request: WebResourceRequest,
         errorResponse: WebResourceResponse,
     ) {
-        if (request.isForMainFrame) {
-            onDiag?.invoke("!! HTTP ${errorResponse.statusCode} on main frame: ${request.url}")
-            if (errorResponse.statusCode == 401) trigger(view, "401 on main frame")
+        if (request.isForMainFrame && errorResponse.statusCode == 401) {
+            trigger(view, "401 on main frame")
         }
     }
 
@@ -109,7 +65,6 @@ class ReauthWebViewClient(
             detail?.didCrash() ?: false else false
         Log.e(TAG, "RENDERER GONE (${profile.alias}) didCrash=$crashed — " +
             "likely OOM/crash rendering a heavy page; recovering")
-        onDiag?.invoke("!! RENDERER GONE didCrash=$crashed (likely OOM)")
         onRendererGone?.invoke(crashed)
         return true
     }
@@ -127,7 +82,6 @@ class ReauthWebViewClient(
                 error.description?.toString() else null
             Log.e(TAG, "main-frame load error (${profile.alias}) code=$code " +
                 "desc=$desc url=${request.url}")
-            onDiag?.invoke("!! main-frame load error code=$code desc=$desc url=${request.url}")
         }
     }
 
