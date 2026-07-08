@@ -52,16 +52,25 @@ class ReauthWebViewClient(
      */
     override fun onPageFinished(view: WebView, url: String?) {
         val js = """(function(){try{
-          var q=function(s){var e=document.querySelector(s);if(!e)return s+'=<none>';
-            var r=e.getBoundingClientRect();var st=getComputedStyle(e);
-            return s+' w='+Math.round(r.width)+' h='+Math.round(r.height)+
-              ' disp='+st.display+' vis='+st.visibility+' opac='+st.opacity+
-              ' tx='+Math.round(r.left);};
-          return 'PROBE iw='+window.innerWidth+' ih='+window.innerHeight+
+          var q=function(sel,el){el=el||document.querySelector(sel);
+            if(!el)return sel+'=<none>';
+            var r=el.getBoundingClientRect();var st=getComputedStyle(el);
+            return sel+' h='+Math.round(r.height)+' disp='+st.display+
+              ' flex='+st.flexGrow+'/'+st.flexShrink+'/'+st.flexBasis+
+              ' minH='+st.minHeight+' H='+st.height+' pos='+st.position+
+              ' ovf='+st.overflowY;};
+          // Walk the real ancestor chain of the chat container up to <html>,
+          // so we see EXACTLY which element in the flex height-chain zeroes out.
+          var chain=[];var el=document.querySelector('#chatContainer');
+          for(var i=0;i<7 && el;i++){
+            var tag=el.id?('#'+el.id):(el.tagName.toLowerCase()+
+              (el.className&&typeof el.className=='string'?'.'+el.className.trim().split(/\s+/)[0]:''));
+            chain.push(q(tag,el));el=el.parentElement;}
+          return 'PROBE2 iw='+window.innerWidth+' ih='+window.innerHeight+
             ' coarse='+matchMedia('(pointer:coarse)').matches+
             ' drawerMQ='+matchMedia('(max-width:1024px) and (pointer:coarse)').matches+
-            ' | '+q('#sidebar')+' | '+q('#chatContainer')+' | '+q('#chatInner')+
-            ' | bodyClass='+document.body.className;
+            ' theme='+(document.documentElement.getAttribute('data-theme'))+
+            ' || '+chain.join(' || ');
         }catch(e){return 'PROBE-ERR '+e;}})();"""
         view.evaluateJavascript(js) { result ->
             onDiag?.invoke("· " + (result ?: "").trim('"').replace("\\\"", "\""))
