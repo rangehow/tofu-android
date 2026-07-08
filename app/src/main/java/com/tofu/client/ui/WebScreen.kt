@@ -176,14 +176,31 @@ private fun androidx.compose.foundation.layout.BoxScope.LogOverlay(
             .background(Color(0xF2101014))
             .padding(10.dp),
     ) {
+        val ctx = androidx.compose.ui.platform.LocalContext.current
         Row(
             Modifier.fillMaxWidth().padding(bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text("WebView diagnostics — ${logs.size} lines",
                 color = Color(0xFFBBBBBB), fontSize = 12.sp)
-            Text("Clear", color = Color(0xFF7FB0FF), fontSize = 12.sp,
-                modifier = Modifier.clickable { onClear() })
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Copy", color = Color(0xFF7FB0FF), fontSize = 12.sp,
+                    modifier = Modifier.clickable {
+                        val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        cm.setPrimaryClip(
+                            android.content.ClipData.newPlainText(
+                                "Tofu WebView logs", logs.joinToString("\n"),
+                            ),
+                        )
+                        android.widget.Toast.makeText(
+                            ctx, "Copied ${logs.size} log lines",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    })
+                Text("Clear", color = Color(0xFF7FB0FF), fontSize = 12.sp,
+                    modifier = Modifier.clickable { onClear() })
+            }
         }
         if (logs.isEmpty()) {
             Text("(no logs yet — reload the page to capture console output)",
