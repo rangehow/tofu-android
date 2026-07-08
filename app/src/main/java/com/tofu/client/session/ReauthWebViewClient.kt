@@ -36,6 +36,8 @@ class ReauthWebViewClient(
      * to the profile list) instead of leaving a dead blank WebView on screen.
      */
     private val onRendererGone: ((crashed: Boolean) -> Unit)? = null,
+    /** Optional sink for human-readable diagnostics shown in the on-screen log. */
+    private val onDiag: ((String) -> Unit)? = null,
 ) : WebViewClient() {
 
     @Volatile private var reauthInFlight = false
@@ -45,8 +47,9 @@ class ReauthWebViewClient(
         request: WebResourceRequest,
         errorResponse: WebResourceResponse,
     ) {
-        if (request.isForMainFrame && errorResponse.statusCode == 401) {
-            trigger(view, "401 on main frame")
+        if (request.isForMainFrame) {
+            onDiag?.invoke("!! HTTP ${errorResponse.statusCode} on main frame: ${request.url}")
+            if (errorResponse.statusCode == 401) trigger(view, "401 on main frame")
         }
     }
 
@@ -65,6 +68,7 @@ class ReauthWebViewClient(
             detail?.didCrash() ?: false else false
         Log.e(TAG, "RENDERER GONE (${profile.alias}) didCrash=$crashed — " +
             "likely OOM/crash rendering a heavy page; recovering")
+        onDiag?.invoke("!! RENDERER GONE didCrash=$crashed (likely OOM)")
         onRendererGone?.invoke(crashed)
         return true
     }
@@ -82,6 +86,7 @@ class ReauthWebViewClient(
                 error.description?.toString() else null
             Log.e(TAG, "main-frame load error (${profile.alias}) code=$code " +
                 "desc=$desc url=${request.url}")
+            onDiag?.invoke("!! main-frame load error code=$code desc=$desc url=${request.url}")
         }
     }
 
