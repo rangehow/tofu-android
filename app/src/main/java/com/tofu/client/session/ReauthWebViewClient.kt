@@ -42,6 +42,38 @@ class ReauthWebViewClient(
 
     @Volatile private var reauthInFlight = false
 
+    /**
+     * After the page settles, probe the DECISIVE layout facts and report them to
+     * the on-screen log: viewport width, pointer:coarse, the tablet-drawer media
+     * query, and the computed size/visibility of the sidebar + main containers.
+     * This distinguishes "content never rendered" from "rendered then hidden"
+     * (e.g. the responsive drawer collapsing the sidebar) without needing
+     * desktop DevTools. Re-probes at +1.5s to catch a post-paint hide.
+     */
+    override fun onPageFinished(view: WebView, url: String?) {
+        val js = """(function(){try{
+          var q=function(s){var e=document.querySelector(s);if(!e)return s+'=<none>';
+            var r=e.getBoundingClientRect();var st=getComputedStyle(e);
+            return s+' w='+Math.round(r.width)+' h='+Math.round(r.height)+
+              ' disp='+st.display+' vis='+st.visibility+' opac='+st.opacity+
+              ' tx='+Math.round(r.left);};
+          return 'PROBE iw='+window.innerWidth+' ih='+window.innerHeight+
+            ' coarse='+matchMedia('(pointer:coarse)').matches+
+            ' drawerMQ='+matchMedia('(max-width:1024px) and (pointer:coarse)').matches+
+            ' | '+q('#sidebar')+' | '+q('#chatContainer')+' | '+q('#chatInner')+
+            ' | bodyClass='+document.body.className;
+        }catch(e){return 'PROBE-ERR '+e;}})();"""
+        view.evaluateJavascript(js) { result ->
+            onDiag?.invoke("· " + (result ?: "").trim('"').replace("\\\"", "\""))
+        }
+        // Re-probe after 1.5s to catch a hide that happens shortly AFTER paint.
+        view.postDelayed({
+            view.evaluateJavascript(js) { result ->
+                onDiag?.invoke("· (+1.5s) " + (result ?: "").trim('"').replace("\\\"", "\""))
+            }
+        }, 1500)
+    }
+
     override fun onReceivedHttpError(
         view: WebView,
         request: WebResourceRequest,
