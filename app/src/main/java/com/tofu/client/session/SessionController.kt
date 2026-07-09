@@ -25,6 +25,26 @@ class SessionController(
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
 
+    /**
+     * Find a password already stored for ANOTHER profile on the SAME host as
+     * [baseUrl]. code-server auth is per-HOST (its session cookie is
+     * `Domain`-pinned to the host), so different `/proxy/PORT/` URLs on one host
+     * share one password. Returns the reusable secret, or null if no same-host
+     * profile has one. [excludeAlias] skips the profile being edited itself.
+     *
+     * Pure over the seams (DAO snapshot + vault) → unit-testable.
+     */
+    suspend fun findSharedSecret(baseUrl: String, excludeAlias: String? = null): String? {
+        val host = ServerUrl.parse(baseUrl)?.host ?: return null
+        for (p in dao.getAllOnce()) {
+            if (p.alias == excludeAlias) continue
+            if (ServerUrl.parse(p.baseUrl)?.host != host) continue
+            val s = secrets.secretFor(p.alias)
+            if (!s.isNullOrEmpty()) return s
+        }
+        return null
+    }
+
     /** Add a new server, store its secret, then attempt the first login. */
     suspend fun addProfile(
         alias: String,
@@ -35,9 +55,12 @@ class SessionController(
         val a = alias.trim()
         if (dao.getByAlias(a) != null) return AddResult.DuplicateAlias
         val profile = ProfileForm.toProfile(0, a, baseUrl, authType, clock())
-        // Store the secret FIRST — login reads it via the vault.
-        if (authType == AuthType.CODE_SERVER_PASSWORD && secret.isNotEmpty()) {
-            secrets.putSecret(a, secret)
+        // Store the secret FIRST — login reads it via the vault. When the field
+        // is left blank, REUSE a password already stored for the same host
+        // (shared per-host code-server auth), so the user needn't re-type it.
+        if (authType == AuthType.CODE_SERVER_PASSWORD) {
+            val effective = secret.ifEmpty { findSharedSecret(baseUrl, excludeAlias = a) ?: "" }
+            if (effective.isNotEmpty()) secrets.putSecret(a, effective)
         }
         val id = dao.insert(profile)
         val saved = profile.copy(id = id)
@@ -70,8 +93,16 @@ class SessionController(
                 secrets.removeSecret(current.alias)
             }
         }
-        // New secret overwrites; blank keeps the existing one.
-        if (newSecret.isNotEmpty()) secrets.putSecret(a, newSecret)
+        // New secret overwrites; blank keeps the existing one. If blank AND this
+        // profile has no secret of its own yet, reuse a same-host password
+        // (shared per-host code-server auth) so it needn't be re-typed.
+        if (newSecret.isNotEmpty()) {
+            secrets.putSecret(a, newSecret)
+        } else if (newAuthType == AuthType.CODE_SERVER_PASSWORD &&
+            secrets.secretFor(a).isNullOrEmpty()
+        ) {
+            findSharedSecret(newUrl, excludeAlias = a)?.let { secrets.putSecret(a, it) }
+        }
 
         val oldHost = ServerUrl.parse(current.baseUrl)?.host
         val newHost = ServerUrl.parse(newUrl)?.host

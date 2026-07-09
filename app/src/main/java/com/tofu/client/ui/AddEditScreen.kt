@@ -12,6 +12,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,17 +36,30 @@ fun AddEditScreen(
     secretAlreadyStored: Boolean,
     onCancel: () -> Unit,
     onSubmit: (alias: String, url: String, auth: AuthType, secret: String) -> Unit,
+    /** Returns the host whose stored password would be reused for this URL when
+     *  the field is left blank, or null. Used for a proactive hint. */
+    reusableHostLookup: suspend (url: String, excludeAlias: String?) -> String? =
+        { _, _ -> null },
 ) {
     var alias by remember { mutableStateOf(editing?.alias ?: "") }
     var url by remember { mutableStateOf(editing?.baseUrl ?: "") }
     var auth by remember { mutableStateOf(editing?.authType ?: AuthType.CODE_SERVER_PASSWORD) }
     var secret by remember { mutableStateOf("") }
+    // Host whose saved password would be reused if the field is left blank.
+    var reuseHost by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(url, auth, editing?.alias) {
+        reuseHost = if (auth == AuthType.CODE_SERVER_PASSWORD)
+            reusableHostLookup(url.trim(), editing?.alias) else null
+    }
 
+    // A blank password is acceptable when EITHER this profile already has a
+    // stored secret (edit) OR a same-host password can be reused (add/edit).
+    val canOmitSecret = secretAlreadyStored || reuseHost != null
     val validation = ProfileForm.validate(
         alias = alias, baseUrl = url, authType = auth, secret = secret,
         existingAliases = existingAliases,
         editingAlias = editing?.alias,
-        secretAlreadyStored = secretAlreadyStored,
+        secretAlreadyStored = canOmitSecret,
     )
 
     Scaffold { pad ->
@@ -76,11 +90,25 @@ fun AddEditScreen(
                 OutlinedTextField(
                     value = secret, onValueChange = { secret = it },
                     label = {
-                        Text(if (secretAlreadyStored) "Password (leave blank to keep)" else "Password")
+                        Text(
+                            when {
+                                secretAlreadyStored -> "Password (leave blank to keep)"
+                                reuseHost != null -> "Password (leave blank to reuse)"
+                                else -> "Password"
+                            },
+                        )
                     },
                     visualTransformation = PasswordVisualTransformation(),
                     isError = validation.errors.containsKey("secret"),
-                    supportingText = { validation.errors["secret"]?.let { Text(it) } },
+                    supportingText = {
+                        val err = validation.errors["secret"]
+                        when {
+                            err != null -> Text(err)
+                            secret.isEmpty() && reuseHost != null ->
+                                Text("Will reuse the saved password for $reuseHost")
+                            else -> {}
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

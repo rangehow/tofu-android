@@ -60,6 +60,17 @@ class ProfilesViewModel(
 
     fun secretStoredFor(alias: String): Boolean = secrets.secretFor(alias) != null
 
+    /**
+     * If [url] shares a host with another profile that already has a stored
+     * password, return that host (for a proactive "password will be reused"
+     * hint). [excludeAlias] skips the profile being edited. Null = nothing to
+     * reuse. Delegates to the tested [SessionController.findSharedSecret].
+     */
+    suspend fun reusableSecretHost(url: String, excludeAlias: String?): String? {
+        if (controller.findSharedSecret(url, excludeAlias) == null) return null
+        return com.tofu.client.session.ServerUrl.parse(url)?.host
+    }
+
     fun activate(profile: Profile) {
         _status.value = UiStatus.LoggingIn(profile.alias)
         viewModelScope.launch {

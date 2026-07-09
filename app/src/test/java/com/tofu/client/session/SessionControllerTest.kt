@@ -41,6 +41,7 @@ class SessionControllerTest {
         init { if (seed != null) rows[seed.id] = seed }
         override fun observeAll(): Flow<List<Profile>> = flowOf(rows.values.toList())
         override suspend fun getById(id: Long) = rows[id]
+        override suspend fun getAllOnce(): List<Profile> = rows.values.toList()
         override suspend fun getByAlias(alias: String) = rows.values.firstOrNull { it.alias == alias }
         override suspend fun insert(profile: Profile): Long {
             val id = nextId++; rows[id] = profile.copy(id = id); return id
@@ -117,6 +118,51 @@ class SessionControllerTest {
         // no credential — the credential would be orphaned under "old".
         assertEquals("sekret", vault.map["new"])
         assertNull(vault.map["old"])
+    }
+
+    @Test
+    fun add_with_blank_secret_reuses_same_host_password() = runTest {
+        // Existing profile on oldHost:15000 with a stored password.
+        val seed = profile("port15000", oldHost).copy(
+            baseUrl = "https://$oldHost/proxy/15000/", authType = AuthType.CODE_SERVER_PASSWORD)
+        val dao = FakeDao(seed); val vault = FakeVault(); val sink = FakeCookieSink()
+        vault.putSecret("port15000", "sharedpw")
+        val ctl = SessionController(dao, vault, mgr(dao, vault, sink))
+
+        // Add a SECOND profile on the SAME host, different port, BLANK password.
+        ctl.addProfile("port8080", "https://$oldHost/proxy/8080/",
+            AuthType.CODE_SERVER_PASSWORD, secret = "")
+
+        // NEUTER: without host-based reuse the new alias would have NO secret.
+        assertEquals("sharedpw", vault.map["port8080"])
+    }
+
+    @Test
+    fun add_with_blank_secret_does_NOT_borrow_from_a_different_host() = runTest {
+        val seed = profile("other", oldHost).copy(authType = AuthType.CODE_SERVER_PASSWORD)
+        val dao = FakeDao(seed); val vault = FakeVault(); val sink = FakeCookieSink()
+        vault.putSecret("other", "sharedpw")
+        val ctl = SessionController(dao, vault, mgr(dao, vault, sink))
+
+        // New profile on a DIFFERENT host, blank password → must NOT borrow.
+        ctl.addProfile("newone", "https://$newHost/proxy/15000/",
+            AuthType.CODE_SERVER_PASSWORD, secret = "")
+
+        assertNull(vault.map["newone"])
+    }
+
+    @Test
+    fun findSharedSecret_matches_host_ignoring_port() = runTest {
+        val seed = profile("p15000", oldHost).copy(
+            baseUrl = "https://$oldHost/proxy/15000/")
+        val dao = FakeDao(seed); val vault = FakeVault(); val sink = FakeCookieSink()
+        vault.putSecret("p15000", "sharedpw")
+        val ctl = SessionController(dao, vault, mgr(dao, vault, sink))
+
+        assertEquals("sharedpw", ctl.findSharedSecret("https://$oldHost/proxy/9999/"))
+        assertNull(ctl.findSharedSecret("https://$newHost/proxy/15000/"))
+        // excludeAlias skips the profile itself (edit case).
+        assertNull(ctl.findSharedSecret("https://$oldHost/proxy/15000/", excludeAlias = "p15000"))
     }
 
     @Test

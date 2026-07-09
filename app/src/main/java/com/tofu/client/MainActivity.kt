@@ -74,6 +74,9 @@ class MainActivity : ComponentActivity() {
                                     if (editing == null) vm.submitAdd(alias, url, auth, secret)
                                     else vm.submitEdit(editing, alias, url, auth, secret)
                                 },
+                                reusableHostLookup = { url, excludeAlias ->
+                                    vm.reusableSecretHost(url, excludeAlias)
+                                },
                             )
                         }
                         is Screen.Web -> WebScreen(

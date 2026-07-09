@@ -34,6 +34,7 @@ class SessionManagerReauthTest {
         val updates = mutableListOf<Profile>()
         override fun observeAll(): Flow<List<Profile>> = flowOf(listOf(current))
         override suspend fun getById(id: Long): Profile? = current
+        override suspend fun getAllOnce(): List<Profile> = listOf(current)
         override suspend fun getByAlias(alias: String): Profile? = current
         override suspend fun insert(profile: Profile): Long = 1
         override suspend fun update(profile: Profile): Int { current = profile; updates += profile; return 1 }

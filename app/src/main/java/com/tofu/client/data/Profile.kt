@@ -60,6 +60,10 @@ interface ProfileDao {
     @Query("SELECT * FROM profiles WHERE alias = :alias LIMIT 1")
     suspend fun getByAlias(alias: String): Profile?
 
+    /** One-shot snapshot (not a Flow) — used to find a same-host stored secret. */
+    @Query("SELECT * FROM profiles")
+    suspend fun getAllOnce(): List<Profile>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(profile: Profile): Long
 
