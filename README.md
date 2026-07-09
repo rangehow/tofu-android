@@ -107,13 +107,32 @@ can't silently rot into a 404.
   loudly instead of silently shipping a 404 link).
 
 ### Release & signing
-A release APK must be **signed** to install on a normal device. Before the first
-real release: create a keystore, add it (base64) + passwords as repo secrets,
-wire a `signingConfigs.release` block in `app/build.gradle.kts`, and reference it
-from the `release` build type. The workflow's release step publishes whatever
-`assembleRelease` produces; an **unsigned** APK is inspection-only and will be
-rejected by Android's installer. This signing step + the on-device
-cookie-persistence test are the parts that require a real Android SDK / device.
+A release APK must be **signed** to install on a normal device. Because this is
+**sideloaded GitHub-Release distribution** (not Play Store), the `release` build
+type is signed with the SAME fixed, committed **debug keystore**
+(`app/debug.keystore`) used for debug builds — see `signingConfig` in the
+`release` block of `app/build.gradle.kts`. This makes `assembleRelease` produce
+a signed, installable APK with no repo-secret setup, and — because the key never
+changes across builds — every future release installs in-place over the previous
+one. Signing with the debug *key* does NOT make the build debuggable
+(`debuggable` stays false on `release`). Before any **Play Store** submission,
+switch to a secret-backed `signingConfigs.release` (keystore base64 + passwords
+as repo secrets). The workflow's release step publishes whatever
+`assembleRelease` produces; an **unsigned** APK is inspection-only and rejected
+by Android's installer.
+
+> **First install may need one uninstall.** The in-place-update guarantee holds
+> only between APKs signed with this committed key. The robot-icon build some
+> users already have predates the fixed-keystore commit (`56115a3`) and any
+> tagged release, so it was likely a hand-distributed debug build signed with an
+> ephemeral key. Android rejects an update across a signature change
+> (`INSTALL_FAILED_UPDATE_INCOMPATIBLE` / "App not installed"). Expected, not
+> alarming: **uninstall the old app once, then install the new signed release;
+> all subsequent updates are in-place.**
+
+This signing setup + the on-device cookie-persistence test are the parts that
+require a real Android SDK / device — the signed APK is first actually built by
+the tag build in CI.
 
 ## Open items
 - **Cellular layer-1** (needs a phone): confirm a phone on cellular lands on the
