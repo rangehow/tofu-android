@@ -13,8 +13,8 @@ android {
         applicationId = "com.tofu.client"
         minSdk = 26          // API 26: EncryptedSharedPreferences + modern WebView
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     signingConfigs {
@@ -44,6 +44,17 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Sideloaded GitHub-Release distribution (no Play Store), so we
+            // sign the release with the SAME fixed, committed debug keystore
+            // used for debug builds. This makes `assembleRelease` produce a
+            // SIGNED, installable APK with no repo-secret setup, and — because
+            // the key never changes — release updates install over each other
+            // (and over existing debug installs) without
+            // INSTALL_FAILED_UPDATE_INCOMPATIBLE. Signing with the debug KEY
+            // does NOT make the build debuggable; that stays false on release.
+            // Switch to a secret-backed signingConfigs.release before any
+            // Play Store submission (see README "Release & signing").
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -98,9 +109,6 @@ dependencies {
 
     // ── WebView (androidx variant, cookie APIs) ──
     implementation("androidx.webkit:webkit:1.11.0")
-
-    // ── Pull-to-refresh around the WebView (recovery from a bad page state) ──
-    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

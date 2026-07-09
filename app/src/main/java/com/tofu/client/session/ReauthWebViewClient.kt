@@ -36,16 +36,9 @@ class ReauthWebViewClient(
      * to the profile list) instead of leaving a dead blank WebView on screen.
      */
     private val onRendererGone: ((crashed: Boolean) -> Unit)? = null,
-    /** Fired when a page load settles (success or error) — used to stop the
-     * pull-to-refresh spinner. */
-    private val onPageDone: (() -> Unit)? = null,
 ) : WebViewClient() {
 
     @Volatile private var reauthInFlight = false
-
-    override fun onPageFinished(view: WebView, url: String?) {
-        onPageDone?.invoke()
-    }
 
     override fun onReceivedHttpError(
         view: WebView,
