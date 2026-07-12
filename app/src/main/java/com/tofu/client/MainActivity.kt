@@ -61,6 +61,17 @@ class MainActivity : ComponentActivity() {
                             onEdit = vm::startEdit,
                             onDelete = vm::deleteProfile,
                             onAdd = vm::startAdd,
+                            scope = lifecycleScope,
+                            // Supervisor bearer token: stored in the same
+                            // encrypted store as passwords, under a per-alias
+                            // namespaced key so it never collides with the login
+                            // secret.
+                            supervisorTokenFor = { alias ->
+                                secrets.secretFor("supervisor-token@$alias")
+                            },
+                            saveSupervisorToken = { alias, tok ->
+                                secrets.putSecret("supervisor-token@$alias", tok)
+                            },
                         )
                         is Screen.AddEdit -> {
                             val editing = vm.editing
@@ -79,20 +90,12 @@ class MainActivity : ComponentActivity() {
                                 },
                             )
                         }
-                        is Screen.Web -> {
-                            // The supervisor bearer token is stored in the same
-                            // encrypted store as passwords, under a namespaced
-                            // alias so it never collides with the login secret.
-                            val tokenAlias = "supervisor-token@" + s.profile.alias
-                            WebScreen(
-                                profile = s.profile,
-                                session = session,
-                                scope = lifecycleScope,
-                                onBack = vm::backToList,
-                                supervisorTokenFor = { secrets.secretFor(tokenAlias) },
-                                saveSupervisorToken = { secrets.putSecret(tokenAlias, it) },
-                            )
-                        }
+                        is Screen.Web -> WebScreen(
+                            profile = s.profile,
+                            session = session,
+                            scope = lifecycleScope,
+                            onBack = vm::backToList,
+                        )
                     }
                 }
             }

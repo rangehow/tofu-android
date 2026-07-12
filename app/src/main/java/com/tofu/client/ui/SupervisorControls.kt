@@ -1,7 +1,9 @@
 package com.tofu.client.ui
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
@@ -90,18 +92,23 @@ fun SupervisorControls(
         }
     }
 
-    Row(modifier.padding(8.dp)) {
-        val label = when (running) {
-            true -> "running"
-            false -> "stopped"
-            null -> "—"
+    Column(modifier) {
+        Row(
+            Modifier.padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val label = when (running) {
+                true -> "running"
+                false -> "stopped"
+                null -> "—"
+            }
+            Text("Server: $label", Modifier.padding(end = 8.dp))
+            Button(onClick = { run("start") }, enabled = !busy) { Text("Start") }
+            TextButton(onClick = { run("stop") }, enabled = !busy) { Text("Stop") }
+            TextButton(onClick = { run("status") }, enabled = !busy) { Text("Refresh") }
         }
-        Text("Server: $label", Modifier.padding(end = 12.dp))
-        Button(onClick = { run("start") }, enabled = !busy) { Text("Start") }
-        TextButton(onClick = { run("stop") }, enabled = !busy) { Text("Stop") }
-        TextButton(onClick = { run("status") }, enabled = !busy) { Text("Refresh") }
+        message?.let { Text(it, Modifier.padding(horizontal = 8.dp)) }
     }
-    message?.let { Text(it, modifier.padding(horizontal = 8.dp)) }
 
     if (askToken) {
         var entry by remember { mutableStateOf("") }

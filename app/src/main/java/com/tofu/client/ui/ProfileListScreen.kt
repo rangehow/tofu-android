@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tofu.client.data.Profile
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * Profile list / switcher — the app's home. Tap a card to activate (log in +
@@ -44,6 +45,11 @@ fun ProfileListScreen(
     onEdit: (Profile) -> Unit,
     onDelete: (Profile) -> Unit,
     onAdd: () -> Unit,
+    scope: CoroutineScope,
+    /** Reads the stored supervisor bearer token for a profile alias, or null. */
+    supervisorTokenFor: (String) -> String? = { null },
+    /** Persists the supervisor bearer token for a profile alias. */
+    saveSupervisorToken: (String, String) -> Unit = { _, _ -> },
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("Tofu servers") }) },
@@ -65,7 +71,10 @@ fun ProfileListScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(profiles, key = { it.id }) { p ->
-                        ProfileRow(p, onActivate, onEdit, onDelete)
+                        ProfileRow(
+                            p, onActivate, onEdit, onDelete,
+                            scope, supervisorTokenFor, saveSupervisorToken,
+                        )
                     }
                 }
             }
@@ -110,6 +119,9 @@ private fun ProfileRow(
     onActivate: (Profile) -> Unit,
     onEdit: (Profile) -> Unit,
     onDelete: (Profile) -> Unit,
+    scope: CoroutineScope,
+    supervisorTokenFor: (String) -> String?,
+    saveSupervisorToken: (String, String) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Row(
@@ -134,10 +146,24 @@ private fun ProfileRow(
                 Icon(Icons.Default.Delete, contentDescription = "Delete")
             }
         }
-        // Whole card is the activate affordance via a trailing button row.
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        // Trailing row: Open + (when a project path is set) the supervisor
+        // Start/Stop controls. These live HERE, not in the WebView, because a
+        // stopped server can't be opened — you must be able to start it from
+        // the list before there is any page to show.
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             androidx.compose.material3.TextButton(onClick = { onActivate(p) }) {
                 Text("Open")
+            }
+            if (!p.projectPath.isNullOrBlank()) {
+                SupervisorControls(
+                    profile = p,
+                    scope = scope,
+                    tokenFor = { supervisorTokenFor(p.alias) },
+                    saveToken = { saveSupervisorToken(p.alias, it) },
+                )
             }
         }
     }

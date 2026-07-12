@@ -19,9 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -68,10 +66,6 @@ fun WebScreen(
     session: SessionManager,
     scope: CoroutineScope,
     onBack: () -> Unit,
-    /** Reads the stored supervisor bearer token for this profile, or null. */
-    supervisorTokenFor: () -> String? = { null },
-    /** Persists the supervisor bearer token for this profile. */
-    saveSupervisorToken: (String) -> Unit = {},
 ) {
     val webRef = remember { arrayOfNulls<WebView>(1) }
 
@@ -213,28 +207,5 @@ fun WebScreen(
             Icon(Icons.Filled.Refresh, contentDescription = "Reload")
         }
 
-        // Start/Stop controls — only when this server has a project path.
-        // Anchored TOP-start under the status bar: the bottom edge is owned by
-        // the SPA's own "Type your message" input bar, so a bottom overlay
-        // collided with it (and statusBarsPadding is a TOP inset — it did
-        // nothing at BottomStart). A translucent Surface keeps the row legible
-        // over the chat without hijacking the page.
-        if (!profile.projectPath.isNullOrBlank()) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(8.dp),
-            ) {
-                SupervisorControls(
-                    profile = profile,
-                    scope = scope,
-                    tokenFor = supervisorTokenFor,
-                    saveToken = saveSupervisorToken,
-                )
-            }
-        }
     }
 }
