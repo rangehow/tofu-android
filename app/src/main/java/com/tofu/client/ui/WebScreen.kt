@@ -101,6 +101,16 @@ fun WebScreen(
                     settings.domStorageEnabled = true        // Tofu uses localStorage/IndexedDB
                     settings.databaseEnabled = true
                     settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+                    // Honor the SPA's <meta viewport width=device-width> exactly
+                    // like Chrome. Without useWideViewPort the WebView ignores
+                    // the meta and lays out at the raw control width, so the
+                    // computed innerWidth lands on the wrong side of the SPA's
+                    // 768/1024 responsive breakpoints (core.js TOFU_BP) and the
+                    // tablet renders a different layout than Chrome on the same
+                    // device. loadWithOverviewMode pairs with it to fit the
+                    // initial page to the viewport.
+                    settings.useWideViewPort = true
+                    settings.loadWithOverviewMode = true
                     val cm = CookieManager.getInstance()
                     cm.setAcceptCookie(true)
                     cm.setAcceptThirdPartyCookies(this, true) // gateway host != Tofu host
@@ -155,6 +165,22 @@ fun WebScreen(
                             // Renderer died (crash / OOM) → the page is a dead
                             // blank surface; return to the profile list.
                             scope.launch(Dispatchers.Main) { onBack() }
+                        },
+                        onPageDone = { view, _ ->
+                            // Viewport-parity probe: log the WebView's computed
+                            // layout width + DPR so breakpoint agreement with
+                            // Chrome (SPA TOFU_BP 768/1024, core.js) can be
+                            // VERIFIED from logcat on a real device rather than
+                            // assumed from useWideViewPort alone. Tag: TofuViewport.
+                            view.evaluateJavascript(
+                                "(function(){try{return JSON.stringify({" +
+                                    "innerWidth:window.innerWidth," +
+                                    "dpr:window.devicePixelRatio," +
+                                    "screenW:window.screen&&window.screen.width," +
+                                    "band:(window.innerWidth<=768?'mobile':" +
+                                    "(window.innerWidth<=1024?'tablet':'desktop'))" +
+                                    "});}catch(e){return 'probe-error:'+e;}})()",
+                            ) { r -> Log.i("TofuViewport", "viewport=$r") }
                         },
                     )
                     webViewClient = client

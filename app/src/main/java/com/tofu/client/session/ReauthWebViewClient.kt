@@ -36,9 +36,20 @@ class ReauthWebViewClient(
      * to the profile list) instead of leaving a dead blank WebView on screen.
      */
     private val onRendererGone: ((crashed: Boolean) -> Unit)? = null,
+    /**
+     * Invoked after each main-frame load finishes. The host uses it to inject a
+     * viewport-diagnostics probe (window.innerWidth / devicePixelRatio) so the
+     * WebView-vs-Chrome breakpoint parity can be verified from logcat on a real
+     * device. Optional — null in tests / when no probe is wanted.
+     */
+    private val onPageDone: ((WebView, String) -> Unit)? = null,
 ) : WebViewClient() {
 
     @Volatile private var reauthInFlight = false
+
+    override fun onPageFinished(view: WebView, url: String) {
+        onPageDone?.invoke(view, url)
+    }
 
     override fun onReceivedHttpError(
         view: WebView,
