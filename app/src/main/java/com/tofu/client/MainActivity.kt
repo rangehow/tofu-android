@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
 
         db = Room.databaseBuilder(
             applicationContext, ProfileDatabase::class.java, "tofu-profiles.db",
-        ).build()
+        ).addMigrations(ProfileDatabase.MIGRATION_1_2).build()
         secrets = SecretStore(applicationContext)
         val dao = db.profileDao()
         session = SessionManager(dao, secrets)
@@ -70,21 +70,29 @@ class MainActivity : ComponentActivity() {
                                 secretAlreadyStored =
                                     editing != null && vm.secretStoredFor(editing.alias),
                                 onCancel = vm::backToList,
-                                onSubmit = { alias, url, auth, secret ->
-                                    if (editing == null) vm.submitAdd(alias, url, auth, secret)
-                                    else vm.submitEdit(editing, alias, url, auth, secret)
+                                onSubmit = { alias, url, auth, secret, projectPath ->
+                                    if (editing == null) vm.submitAdd(alias, url, auth, secret, projectPath)
+                                    else vm.submitEdit(editing, alias, url, auth, secret, projectPath)
                                 },
                                 reusableHostLookup = { url, excludeAlias ->
                                     vm.reusableSecretHost(url, excludeAlias)
                                 },
                             )
                         }
-                        is Screen.Web -> WebScreen(
-                            profile = s.profile,
-                            session = session,
-                            scope = lifecycleScope,
-                            onBack = vm::backToList,
-                        )
+                        is Screen.Web -> {
+                            // The supervisor bearer token is stored in the same
+                            // encrypted store as passwords, under a namespaced
+                            // alias so it never collides with the login secret.
+                            val tokenAlias = "supervisor-token@" + s.profile.alias
+                            WebScreen(
+                                profile = s.profile,
+                                session = session,
+                                scope = lifecycleScope,
+                                onBack = vm::backToList,
+                                supervisorTokenFor = { secrets.secretFor(tokenAlias) },
+                                saveSupervisorToken = { secrets.putSecret(tokenAlias, it) },
+                            )
+                        }
                     }
                 }
             }

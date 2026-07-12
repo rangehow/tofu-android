@@ -66,6 +66,10 @@ fun WebScreen(
     session: SessionManager,
     scope: CoroutineScope,
     onBack: () -> Unit,
+    /** Reads the stored supervisor bearer token for this profile, or null. */
+    supervisorTokenFor: () -> String? = { null },
+    /** Persists the supervisor bearer token for this profile. */
+    saveSupervisorToken: (String) -> Unit = {},
 ) {
     val webRef = remember { arrayOfNulls<WebView>(1) }
 
@@ -201,6 +205,20 @@ fun WebScreen(
                 .alpha(0.6f),
         ) {
             Icon(Icons.Filled.Refresh, contentDescription = "Reload")
+        }
+
+        // Start/Stop controls — only when this server has a project path.
+        if (!profile.projectPath.isNullOrBlank()) {
+            androidx.compose.foundation.layout.Column(
+                Modifier.align(Alignment.BottomStart).statusBarsPadding().padding(4.dp),
+            ) {
+                SupervisorControls(
+                    profile = profile,
+                    scope = scope,
+                    tokenFor = supervisorTokenFor,
+                    saveToken = saveSupervisorToken,
+                )
+            }
         }
     }
 }

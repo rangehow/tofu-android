@@ -35,7 +35,7 @@ fun AddEditScreen(
     existingAliases: Set<String>,
     secretAlreadyStored: Boolean,
     onCancel: () -> Unit,
-    onSubmit: (alias: String, url: String, auth: AuthType, secret: String) -> Unit,
+    onSubmit: (alias: String, url: String, auth: AuthType, secret: String, projectPath: String) -> Unit,
     /** Returns the host whose stored password would be reused for this URL when
      *  the field is left blank, or null. Used for a proactive hint. */
     reusableHostLookup: suspend (url: String, excludeAlias: String?) -> String? =
@@ -45,6 +45,7 @@ fun AddEditScreen(
     var url by remember { mutableStateOf(editing?.baseUrl ?: "") }
     var auth by remember { mutableStateOf(editing?.authType ?: AuthType.CODE_SERVER_PASSWORD) }
     var secret by remember { mutableStateOf("") }
+    var projectPath by remember { mutableStateOf(editing?.projectPath ?: "") }
     // Host whose saved password would be reused if the field is left blank.
     var reuseHost by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(url, auth, editing?.alias) {
@@ -86,6 +87,18 @@ fun AddEditScreen(
 
             AuthTypePicker(auth) { auth = it }
 
+            // Optional host path of the project this server runs from. When set,
+            // the WebView screen shows Start/Stop controls that drive the
+            // supervisor. Left blank → the server is "open only".
+            OutlinedTextField(
+                value = projectPath, onValueChange = { projectPath = it },
+                label = { Text("Project path (optional — enables Start/Stop)") },
+                supportingText = {
+                    Text("Absolute host path, e.g. /home/dev/chatui. Leave blank for open-only.")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             if (auth == AuthType.CODE_SERVER_PASSWORD) {
                 OutlinedTextField(
                     value = secret, onValueChange = { secret = it },
@@ -114,7 +127,7 @@ fun AddEditScreen(
             }
 
             Button(
-                onClick = { onSubmit(alias.trim(), url.trim(), auth, secret) },
+                onClick = { onSubmit(alias.trim(), url.trim(), auth, secret, projectPath.trim()) },
                 enabled = validation.ok,
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             ) { Text("Save & connect") }

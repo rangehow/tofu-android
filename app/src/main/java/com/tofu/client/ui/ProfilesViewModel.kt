@@ -78,10 +78,10 @@ class ProfilesViewModel(
         }
     }
 
-    fun submitAdd(alias: String, url: String, auth: AuthType, secret: String) {
+    fun submitAdd(alias: String, url: String, auth: AuthType, secret: String, projectPath: String = "") {
         _status.value = UiStatus.LoggingIn(alias)
         viewModelScope.launch {
-            when (val r = controller.addProfile(alias, url, auth, secret)) {
+            when (val r = controller.addProfile(alias, url, auth, secret, projectPath)) {
                 is SessionController.AddResult.DuplicateAlias ->
                     _status.value = UiStatus.Error("A server named \"$alias\" already exists")
                 is SessionController.AddResult.Added -> handleLogin(r.login, r.profile)
@@ -89,11 +89,12 @@ class ProfilesViewModel(
         }
     }
 
-    fun submitEdit(current: Profile, alias: String, url: String, auth: AuthType, secret: String) {
+    fun submitEdit(current: Profile, alias: String, url: String, auth: AuthType, secret: String, projectPath: String = "") {
         _status.value = UiStatus.LoggingIn(alias)
         viewModelScope.launch {
-            val updated = current.copy(alias = alias, baseUrl = url, authType = auth)
-            handleLogin(controller.editProfile(current, alias, url, auth, secret), updated)
+            val pp = projectPath.trim().ifEmpty { null }
+            val updated = current.copy(alias = alias, baseUrl = url, authType = auth, projectPath = pp)
+            handleLogin(controller.editProfile(current, alias, url, auth, secret, projectPath), updated)
         }
     }
 

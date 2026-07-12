@@ -47,6 +47,12 @@ data class Profile(
     @ColumnInfo(name = "auth_type") val authType: AuthType = AuthType.CODE_SERVER_PASSWORD,
     @ColumnInfo(name = "cookie_host") val cookieHost: String? = null,
     @ColumnInfo(name = "last_used_at") val lastUsedAt: Long = 0,
+    /**
+     * Absolute host path of the Tofu project this server runs from, used by the
+     * supervisor to start/stop it remotely. Null → the server is "open only"
+     * (no start/stop controls shown). Added in schema v2.
+     */
+    @ColumnInfo(name = "project_path") val projectPath: String? = null,
 )
 
 @Dao

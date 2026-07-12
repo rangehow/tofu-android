@@ -75,6 +75,7 @@ object ProfileForm {
         baseUrl: String,
         authType: AuthType,
         lastUsedAt: Long,
+        projectPath: String? = null,
     ): com.tofu.client.data.Profile {
         val u = baseUrl.trim()
         return com.tofu.client.data.Profile(
@@ -84,6 +85,7 @@ object ProfileForm {
             authType = authType,
             instanceUuid = ServerUrl.parse(u)?.instanceUuid,
             lastUsedAt = lastUsedAt,
+            projectPath = projectPath?.trim()?.ifEmpty { null },
         )
     }
 }

@@ -51,10 +51,11 @@ class SessionController(
         baseUrl: String,
         authType: AuthType,
         secret: String,
+        projectPath: String? = null,
     ): AddResult {
         val a = alias.trim()
         if (dao.getByAlias(a) != null) return AddResult.DuplicateAlias
-        val profile = ProfileForm.toProfile(0, a, baseUrl, authType, clock())
+        val profile = ProfileForm.toProfile(0, a, baseUrl, authType, clock(), projectPath)
         // Store the secret FIRST — login reads it via the vault. When the field
         // is left blank, REUSE a password already stored for the same host
         // (shared per-host code-server auth), so the user needn't re-type it.
@@ -82,8 +83,10 @@ class SessionController(
         newUrl: String,
         newAuthType: AuthType,
         newSecret: String,
+        newProjectPath: String? = null,
     ): LoginResult {
         val a = newAlias.trim()
+        val pp = newProjectPath?.trim()?.ifEmpty { null }
 
         // Rename: move the alias-keyed secret so the credential isn't orphaned.
         if (a != current.alias) {
@@ -106,14 +109,14 @@ class SessionController(
 
         val oldHost = ServerUrl.parse(current.baseUrl)?.host
         val newHost = ServerUrl.parse(newUrl)?.host
-        val base = current.copy(alias = a, authType = newAuthType)
+        val base = current.copy(alias = a, authType = newAuthType, projectPath = pp)
 
         return if (oldHost != null && newHost != null && oldHost != newHost) {
             // URL host changed → the purge-and-relogin path owns persistence.
             session.updateUrlAndReauth(base, newUrl)
         } else {
             val updated = ProfileForm.toProfile(
-                current.id, a, newUrl, newAuthType, current.lastUsedAt,
+                current.id, a, newUrl, newAuthType, current.lastUsedAt, pp,
             )
             dao.update(updated)
             session.login(updated)

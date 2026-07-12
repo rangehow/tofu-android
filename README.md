@@ -134,6 +134,34 @@ This signing setup + the on-device cookie-persistence test are the parts that
 require a real Android SDK / device — the signed APK is first actually built by
 the tag build in CI.
 
+## Remote start/stop (supervisor)
+
+Beyond "open" (the WebView), a profile can carry an optional **project path** so
+the app can **start and stop** the Tofu server on the host. Because a stopped
+server can't answer a "start me" request, this is driven by a separate always-on
+daemon, `supervisor.py` (in the Tofu repo), NOT by Tofu itself. Design +
+rationale: [`docs/SUPERVISOR_DESIGN.md`](docs/SUPERVISOR_DESIGN.md).
+
+- **Reachability:** the supervisor is proxied by the SAME code-server as Tofu,
+  one port up — Tofu `…/proxy/15000/` → supervisor `…/proxy/15001`. The app
+  reuses the profile's `code-server-session` cookie.
+- **Auth (defence in depth):** every control call ALSO carries a Bearer token
+  (`TOFU_SUPERVISOR_TOKEN`). The daemon fails CLOSED (503) if the token is
+  unset. The app prompts for the token on first Start/Stop and stores it in the
+  same encrypted store as passwords (namespaced key, never colliding).
+- **Safety:** `projectPath` is validated against a strict realpath allow-list
+  (`TOFU_SUPERVISOR_PROJECTS`) on the host so it can't spawn an arbitrary cwd.
+
+**Run the supervisor on the host** (owner-ratified: a systemd user unit):
+```bash
+export TOFU_SUPERVISOR_TOKEN=$(openssl rand -hex 24)
+export TOFU_SUPERVISOR_PROJECTS=/abs/path/to/chatui   # ':'-separated allow-list
+./supervisor.sh install     # systemd --user unit, Restart=always
+# where user-lingering is unavailable:  ./supervisor.sh nohup
+```
+Then in the app: edit the server → set **Project path** to the same absolute
+path → open it → use the **Start / Stop** controls (enter the token once).
+
 ## Open items
 - **Cellular layer-1** (needs a phone): confirm a phone on cellular lands on the
   password page (fast path) vs an SSO screen (`AuthType.INTERACTIVE_SSO` handles
