@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -111,10 +113,14 @@ fun WebScreen(
                     // computed innerWidth lands on the wrong side of the SPA's
                     // 768/1024 responsive breakpoints (core.js TOFU_BP) and the
                     // tablet renders a different layout than Chrome on the same
-                    // device. loadWithOverviewMode pairs with it to fit the
-                    // initial page to the viewport.
+                    // device.
+                    //
+                    // NOTE: loadWithOverviewMode was tried alongside this in
+                    // v0.1.3 but is deliberately NOT set — it forces a
+                    // zoom-to-fit initial layout that can collapse the page to
+                    // ~0 height (the "flash-then-blank" / black-line regression).
+                    // useWideViewPort alone delivers the Chrome-parity width.
                     settings.useWideViewPort = true
-                    settings.loadWithOverviewMode = true
                     val cm = CookieManager.getInstance()
                     cm.setAcceptCookie(true)
                     cm.setAcceptThirdPartyCookies(this, true) // gateway host != Tofu host
@@ -208,9 +214,19 @@ fun WebScreen(
         }
 
         // Start/Stop controls — only when this server has a project path.
+        // Anchored TOP-start under the status bar: the bottom edge is owned by
+        // the SPA's own "Type your message" input bar, so a bottom overlay
+        // collided with it (and statusBarsPadding is a TOP inset — it did
+        // nothing at BottomStart). A translucent Surface keeps the row legible
+        // over the chat without hijacking the page.
         if (!profile.projectPath.isNullOrBlank()) {
-            androidx.compose.foundation.layout.Column(
-                Modifier.align(Alignment.BottomStart).statusBarsPadding().padding(4.dp),
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(8.dp),
             ) {
                 SupervisorControls(
                     profile = profile,
