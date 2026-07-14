@@ -56,10 +56,17 @@ A standalone Quart (or stdlib `http.server`) micro-service. **Not** part of
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| `GET`  | `/status`      | — | `{running: bool, pid, host, projectPath, port, uptimeSec}` |
-| `POST` | `/start`       | `{projectPath}` | `{ok, running, pid, alreadyRunning}` |
-| `POST` | `/stop`        | `{projectPath}` | `{ok, wasRunning, exitCode}` |
-| `GET`  | `/health`      | — | `{ok:true, version}` (liveness, unauthenticated-safe) |
+| Method | Path | Auth | Returns |
+|---|---|---|---|
+| `GET`  | `/health`      | none | `{ok:true, version}` (liveness) |
+| `GET`  | `/status`      | **none (read-only)** | `{running, pid, host, projectPath, …}` |
+| `POST` | `/start`       | **Bearer token** | `{ok, running, pid, alreadyRunning}` |
+| `POST` | `/stop`        | **Bearer token** | `{ok, wasRunning, exitCode}` |
+
+**Least-privilege:** only the STATE-CHANGING endpoints require the token.
+`/status` reports running/pid and mutates nothing, so it is gated by the
+code-server cookie alone (same door as the proxied Tofu UI) — not the token.
+All three still enforce the `projectPath` allow-list (403 on a non-listed path).
 
 - **Start** = `subprocess.Popen(['python','server.py'], cwd=projectPath,
   env=inherited, start_new_session=True)`, stdout/stderr → a log file under the
@@ -90,9 +97,11 @@ Guard it:
 ### 3.5 Auth
 - Behind code-server: the proxy only forwards requests carrying a valid
   `code-server-session` cookie, so the App's existing session is sufficient.
-- **Defence in depth (recommended):** supervisor also checks a shared token
-  (`TOFU_SUPERVISOR_TOKEN`) in an `Authorization: Bearer` header, so it is not
-  wide-open even if run *without* code-server in front. App stores the token
+- **Defence in depth (SHIPPED):** supervisor checks a shared token
+  (`TOFU_SUPERVISOR_TOKEN`) in an `Authorization: Bearer` header on the
+  STATE-CHANGING endpoints (`/start`, `/stop`) only — least-privilege leaves the
+  read-only `/status` on the cookie gate. Fail-closed: with no token configured,
+  `/start` / `/stop` return 503 while `/status` stays reachable. App stores the token
   alongside the profile secret. (Open question Q3 below.)
 
 ### 3.6 Logging (CLAUDE.md §2 discipline)

@@ -52,8 +52,12 @@ fun SupervisorControls(
     var pendingAction by remember { mutableStateOf<String?>(null) }  // "start" | "stop" | "status"
 
     fun run(action: String) {
-        val token = tokenFor()
-        if (token.isNullOrBlank()) { pendingAction = action; askToken = true; return }
+        // /status is read-only and needs no token; only the state-changing
+        // start/stop require it. So a token prompt is triggered ONLY for those.
+        val token = tokenFor().orEmpty()
+        if (action != "status" && token.isBlank()) {
+            pendingAction = action; askToken = true; return
+        }
         busy = true
         scope.launch {
             val res = withContext(Dispatchers.IO) {
@@ -82,8 +86,9 @@ fun SupervisorControls(
                 }
                 is SupervisorClient.Result.Failed -> {
                     message = res.message
-                    if (res.code == 401 || res.code == 503) {
-                        // Bad/missing token → re-prompt.
+                    // Only the state-changing actions carry a token → only they
+                    // re-prompt on an auth failure. /status is read-only.
+                    if (action != "status" && (res.code == 401 || res.code == 503)) {
                         pendingAction = action; askToken = true
                     }
                 }
