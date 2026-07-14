@@ -56,17 +56,17 @@ A standalone Quart (or stdlib `http.server`) micro-service. **Not** part of
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| Method | Path | Auth | Returns |
-|---|---|---|---|
-| `GET`  | `/health`      | none | `{ok:true, version}` (liveness) |
-| `GET`  | `/status`      | **none (read-only)** | `{running, pid, host, projectPath, …}` |
-| `POST` | `/start`       | **Bearer token** | `{ok, running, pid, alreadyRunning}` |
-| `POST` | `/stop`        | **Bearer token** | `{ok, wasRunning, exitCode}` |
+| `GET`  | `/health`      | — | `{ok:true, version}` (liveness) |
+| `GET`  | `/status`      | `?projectPath=<abs>` | `{running, pid, host, projectPath, …}` |
+| `POST` | `/start`       | `{projectPath}` | `{ok, running, pid, alreadyRunning}` |
+| `POST` | `/stop`        | `{projectPath}` | `{ok, wasRunning, exitCode}` |
 
-**Least-privilege:** only the STATE-CHANGING endpoints require the token.
-`/status` reports running/pid and mutates nothing, so it is gated by the
-code-server cookie alone (same door as the proxied Tofu UI) — not the token.
-All three still enforce the `projectPath` allow-list (403 on a non-listed path).
+**No auth (personal app).** The code-server password already gates the whole
+proxy the supervisor sits behind — and code-server's own terminal can already
+run any shell command — so a second token would guard an already-locked door
+and only add friction for the single user. The one guard kept is the
+`projectPath` allow-list (403 on a non-listed path), which is CONFIG ("which
+projects may I manage"), not authentication.
 
 - **Start** = `subprocess.Popen(['python','server.py'], cwd=projectPath,
   env=inherited, start_new_session=True)`, stdout/stderr → a log file under the
@@ -94,15 +94,15 @@ Guard it:
 - Each allowed path must contain a `server.py` and a `stop.sh` (sanity check).
 - **Never** derive the runnable path from the request alone.
 
-### 3.5 Auth
+### 3.5 Auth (none — personal app)
 - Behind code-server: the proxy only forwards requests carrying a valid
   `code-server-session` cookie, so the App's existing session is sufficient.
-- **Defence in depth (SHIPPED):** supervisor checks a shared token
-  (`TOFU_SUPERVISOR_TOKEN`) in an `Authorization: Bearer` header on the
-  STATE-CHANGING endpoints (`/start`, `/stop`) only — least-privilege leaves the
-  read-only `/status` on the cookie gate. Fail-closed: with no token configured,
-  `/start` / `/stop` return 503 while `/status` stays reachable. App stores the token
-  alongside the profile secret. (Open question Q3 below.)
+- **No supervisor token (revised).** An earlier draft added a
+  `TOFU_SUPERVISOR_TOKEN` Bearer for defence in depth. Dropped: Tofu is a
+  personal app, the code-server password already gates the proxy, and
+  code-server's terminal can already run any command — a second token guarded an
+  already-locked door and only cost the single user friction. The allow-list is
+  the sole remaining guard (config, not auth).
 
 ### 3.6 Logging (CLAUDE.md §2 discipline)
 Standard `get_logger(__name__)`; every start/stop is an `audit_log('supervisor_start'/'supervisor_stop', project=…, pid=…, exit=…)`. Zero silent catches.
@@ -149,11 +149,12 @@ rule lives in one place.
   option that makes the supervisor genuinely always-on and crash-surviving; a
   code-server task dies with the IDE session. **Fallback:** `supervisor.sh` +
   `nohup` only where systemd user-lingering is unavailable.
-- **Q3 — YES, add the Bearer token IN ADDITION to the code-server cookie.**
-  Mandatory, not optional: a remote process-spawner in front of
-  `TOFU_REQUIRE_PG=1` production hosts must not rely on a single gate. Defence
-  in depth. App stores the token in the secret store alongside the profile
-  secret.
+- **Q3 — NO token (REVERSED).** Originally ratified as "add a Bearer token for
+  defence in depth", then reversed by the owner: Tofu is a PERSONAL app, the
+  code-server password already gates the proxy, and code-server's terminal can
+  already run any shell command — so a second token guards an already-locked
+  door and only adds friction for the single user. No `TOFU_SUPERVISOR_TOKEN`;
+  the `projectPath` allow-list (config, not auth) is the sole guard.
 - **Q4 — NO `/restart`.** Keep the supervisor minimal; the App composes
   stop→poll→start.
 - **Q5 — `/start` returns IMMEDIATELY; the App polls `/status`** until the port

@@ -46,10 +46,6 @@ fun ProfileListScreen(
     onDelete: (Profile) -> Unit,
     onAdd: () -> Unit,
     scope: CoroutineScope,
-    /** Reads the stored supervisor bearer token for a profile alias, or null. */
-    supervisorTokenFor: (String) -> String? = { null },
-    /** Persists the supervisor bearer token for a profile alias. */
-    saveSupervisorToken: (String, String) -> Unit = { _, _ -> },
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("Tofu servers") }) },
@@ -71,10 +67,7 @@ fun ProfileListScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(profiles, key = { it.id }) { p ->
-                        ProfileRow(
-                            p, onActivate, onEdit, onDelete,
-                            scope, supervisorTokenFor, saveSupervisorToken,
-                        )
+                        ProfileRow(p, onActivate, onEdit, onDelete, scope)
                     }
                 }
             }
@@ -120,8 +113,6 @@ private fun ProfileRow(
     onEdit: (Profile) -> Unit,
     onDelete: (Profile) -> Unit,
     scope: CoroutineScope,
-    supervisorTokenFor: (String) -> String?,
-    saveSupervisorToken: (String, String) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Row(
@@ -158,12 +149,7 @@ private fun ProfileRow(
                 Text("Open")
             }
             if (!p.projectPath.isNullOrBlank()) {
-                SupervisorControls(
-                    profile = p,
-                    scope = scope,
-                    tokenFor = { supervisorTokenFor(p.alias) },
-                    saveToken = { saveSupervisorToken(p.alias, it) },
-                )
+                SupervisorControls(profile = p, scope = scope)
             }
         }
     }

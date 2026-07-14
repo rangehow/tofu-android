@@ -16,9 +16,9 @@ import java.util.concurrent.TimeUnit
  *
  * Reachability: the supervisor sits behind the SAME code-server that proxies
  * Tofu, on a sibling proxied port (15000 → 15001), so it inherits the
- * `code-server-session` cookie the profile login already established. Defence
- * in depth: every control call also carries a Bearer token
- * ([SupervisorUrl] does the URL half; this class attaches cookie + token).
+ * `code-server-session` cookie the profile login already established. No extra
+ * auth token — Tofu is a personal app and the code-server password already
+ * gates the whole proxy; this class just reuses that cookie.
  *
  * The HTTP-free URL/endpoint logic lives in [SupervisorUrl] so it is
  * unit-testable without a device.
@@ -37,18 +37,18 @@ class SupervisorClient(
     }
 
     /** GET /status — authoritative running state (used for polling after start). */
-    fun status(profile: Profile, token: String): Result =
-        call(profile, token, SupervisorUrl.STATUS, method = "GET")
+    fun status(profile: Profile): Result =
+        call(profile, SupervisorUrl.STATUS, method = "GET")
 
     /** POST /start — idempotent; returns immediately, caller polls [status]. */
-    fun start(profile: Profile, token: String): Result =
-        call(profile, token, SupervisorUrl.START, method = "POST")
+    fun start(profile: Profile): Result =
+        call(profile, SupervisorUrl.START, method = "POST")
 
     /** POST /stop — runs the project's stop.sh via the supervisor. */
-    fun stop(profile: Profile, token: String): Result =
-        call(profile, token, SupervisorUrl.STOP, method = "POST")
+    fun stop(profile: Profile): Result =
+        call(profile, SupervisorUrl.STOP, method = "POST")
 
-    private fun call(profile: Profile, token: String, endpoint: String, method: String): Result {
+    private fun call(profile: Profile, endpoint: String, method: String): Result {
         val projectPath = profile.projectPath
         if (projectPath.isNullOrBlank()) {
             return Result.Failed(0, "no project path configured")
@@ -59,8 +59,8 @@ class SupervisorClient(
             if (method == "GET") projectPath else null)
 
         val builder = Request.Builder().url(url)
-            .header("Authorization", "Bearer $token")
-        // Reuse the profile's live code-server session cookie (same host).
+        // Reuse the profile's live code-server session cookie (same host) —
+        // the only gate the supervisor relies on.
         cookieProvider(base.origin)?.let { builder.header("Cookie", it) }
 
         if (method == "POST") {

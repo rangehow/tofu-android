@@ -145,22 +145,21 @@ rationale: [`docs/SUPERVISOR_DESIGN.md`](docs/SUPERVISOR_DESIGN.md).
 - **Reachability:** the supervisor is proxied by the SAME code-server as Tofu,
   one port up — Tofu `…/proxy/15000/` → supervisor `…/proxy/15001`. The app
   reuses the profile's `code-server-session` cookie.
-- **Auth (defence in depth):** every control call ALSO carries a Bearer token
-  (`TOFU_SUPERVISOR_TOKEN`). The daemon fails CLOSED (503) if the token is
-  unset. The app prompts for the token on first Start/Stop and stores it in the
-  same encrypted store as passwords (namespaced key, never colliding).
+- **No auth:** Tofu is a personal app and the code-server password already gates
+  the whole proxy (its terminal can already run any shell command), so the
+  supervisor adds NO token — nothing to type in the app.
 - **Safety:** `projectPath` is validated against a strict realpath allow-list
   (`TOFU_SUPERVISOR_PROJECTS`) on the host so it can't spawn an arbitrary cwd.
+  This is CONFIG ("which projects may I manage"), not authentication.
 
 **Run the supervisor on the host** (owner-ratified: a systemd user unit):
 ```bash
-export TOFU_SUPERVISOR_TOKEN=$(openssl rand -hex 24)
 export TOFU_SUPERVISOR_PROJECTS=/abs/path/to/chatui   # ':'-separated allow-list
 ./supervisor.sh install     # systemd --user unit, Restart=always
 # where user-lingering is unavailable:  ./supervisor.sh nohup
 ```
 Then in the app: edit the server → set **Project path** to the same absolute
-path → open it → use the **Start / Stop** controls (enter the token once).
+path → open it from the server list → use the **Start / Stop** controls.
 
 ## Open items
 - **Cellular layer-1** (needs a phone): confirm a phone on cellular lands on the

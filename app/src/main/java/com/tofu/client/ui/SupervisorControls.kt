@@ -4,9 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Alignment
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,9 +27,8 @@ import kotlinx.coroutines.withContext
  * host-side supervisor via [client]. Rendered only when the profile has a
  * projectPath.
  *
- * Token handling: the supervisor requires a Bearer token (defence in depth on
- * top of the code-server cookie). If none is stored, the first action prompts
- * for it and persists it via [saveToken]. [tokenFor] reads it back.
+ * No auth: Tofu is a personal app and the code-server password already gates
+ * the whole proxy the supervisor sits behind, so there is nothing to type here.
  *
  * All network calls run on [Dispatchers.IO]; after a start we poll /status (the
  * server binds asynchronously — /start returns immediately by design).
@@ -40,31 +37,21 @@ import kotlinx.coroutines.withContext
 fun SupervisorControls(
     profile: Profile,
     scope: CoroutineScope,
-    tokenFor: () -> String?,
-    saveToken: (String) -> Unit,
     client: SupervisorClient = SupervisorClient(),
     modifier: Modifier = Modifier,
 ) {
     var running by remember { mutableStateOf<Boolean?>(null) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    var askToken by remember { mutableStateOf(false) }
-    var pendingAction by remember { mutableStateOf<String?>(null) }  // "start" | "stop" | "status"
 
     fun run(action: String) {
-        // /status is read-only and needs no token; only the state-changing
-        // start/stop require it. So a token prompt is triggered ONLY for those.
-        val token = tokenFor().orEmpty()
-        if (action != "status" && token.isBlank()) {
-            pendingAction = action; askToken = true; return
-        }
         busy = true
         scope.launch {
             val res = withContext(Dispatchers.IO) {
                 when (action) {
-                    "start" -> client.start(profile, token)
-                    "stop" -> client.stop(profile, token)
-                    else -> client.status(profile, token)
+                    "start" -> client.start(profile)
+                    "stop" -> client.stop(profile)
+                    else -> client.status(profile)
                 }
             }
             when (res) {
@@ -76,7 +63,7 @@ fun SupervisorControls(
                     if (action == "start" && !res.running) {
                         for (i in 0 until 6) {
                             delay(2000)
-                            val s = withContext(Dispatchers.IO) { client.status(profile, token) }
+                            val s = withContext(Dispatchers.IO) { client.status(profile) }
                             if (s is SupervisorClient.Result.Ok && s.running) {
                                 running = true
                                 break
@@ -86,11 +73,6 @@ fun SupervisorControls(
                 }
                 is SupervisorClient.Result.Failed -> {
                     message = res.message
-                    // Only the state-changing actions carry a token → only they
-                    // re-prompt on an auth failure. /status is read-only.
-                    if (action != "status" && (res.code == 401 || res.code == 503)) {
-                        pendingAction = action; askToken = true
-                    }
                 }
             }
             busy = false
@@ -113,32 +95,5 @@ fun SupervisorControls(
             TextButton(onClick = { run("status") }, enabled = !busy) { Text("Refresh") }
         }
         message?.let { Text(it, Modifier.padding(horizontal = 8.dp)) }
-    }
-
-    if (askToken) {
-        var entry by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { askToken = false; pendingAction = null },
-            title = { Text("Supervisor token") },
-            text = {
-                OutlinedTextField(
-                    value = entry, onValueChange = { entry = it },
-                    label = { Text("Bearer token (TOFU_SUPERVISOR_TOKEN)") },
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (entry.isNotBlank()) {
-                        saveToken(entry.trim())
-                        askToken = false
-                        pendingAction?.let { run(it) }
-                        pendingAction = null
-                    }
-                }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { askToken = false; pendingAction = null }) { Text("Cancel") }
-            },
-        )
     }
 }
