@@ -68,10 +68,13 @@ jobs:
           cp "$src" "app/build/outputs/apk/release/tofu-android.apk"
           echo "Published asset will be: tofu-android.apk (from $src)"
 
-      # NOTE: a release APK must be SIGNED to install on a normal device.
-      # Provide a keystore via repo secrets and wire the signingConfig, or sign
-      # in a follow-up step, before publishing. Unsigned release APKs are for
-      # inspection only. See README "Release & signing".
+      # The release APK is ALREADY signed: build.gradle.kts binds the release
+      # buildType to a FIXED, committed debug keystore (app/debug.keystore), so
+      # assembleRelease produces a directly-installable, update-compatible APK
+      # with NO repo-secret setup. (Signing with the debug KEY does not make the
+      # build debuggable — release stays isDebuggable=false.) Switch to a
+      # secret-backed signingConfigs.release only before any Play Store
+      # submission. See README "Release / cutting a version".
       - name: Publish APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

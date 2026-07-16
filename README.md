@@ -227,3 +227,57 @@ mechanism is removed):**
   (neuter: drop the move → the credential is orphaned and the rename test fails).
 - `SessionController.deleteProfile` removes both the secret and the row (never
   orphans a credential).
+
+
+## Release / cutting a version
+
+Publishing a new App build is a **deterministic, tag-triggered** flow — no
+manual APK upload, no per-build keystore setup. The device download link the
+Tofu backend serves (`DEFAULT_MOBILE_CLIENT_URL` →
+`…/releases/latest/download/tofu-android.apk`) always points at whatever the
+newest tagged release published, so cutting a version IS the delivery.
+
+### Prerequisites
+- A machine/terminal with **GitHub write access** to
+  `github.com/rangehow/tofu-android` (push over HTTPS with a credential helper /
+  token, or SSH). CI itself needs no secrets — the release APK is signed with
+  the **committed** `app/debug.keystore` (see below), not a repo secret.
+
+### Steps
+1. **Bump the version** in `app/build.gradle.kts` `defaultConfig`:
+   - `versionCode` — integer, MUST strictly increase (Android refuses a
+     downgrade install); e.g. `12`.
+   - `versionName` — human string, e.g. `"0.1.11"`.
+   Commit the bump together with the change it ships.
+2. **Tag and push** (fast-forward; never force):
+   ```bash
+   git push origin main
+   git tag vX.Y.Z          # e.g. v0.1.11 — MUST match versionName, prefix "v"
+   git push origin vX.Y.Z
+   ```
+   The `v*` tag is what triggers the release path in
+   `.github/workflows/build-apk.yml` (a plain push to `main` only builds/tests
+   the debug APK — it does NOT publish a release).
+3. **Watch CI** (Actions → the `vX.Y.Z` run). On the tag it runs, in order:
+   `Assemble release APK` → `Rename release APK to canonical asset name` →
+   `Publish APK to GitHub Release`. All three must be green.
+4. **Verify the asset name.** Open the `vX.Y.Z` Release page and confirm the
+   attached asset is **exactly** `tofu-android.apk`. This is load-bearing: the
+   backend deep link 404s on any other name. The coupling is guarded by the
+   backend test `tests/test_mobile_client_apk_url.py` (asset name ==
+   `MOBILE_CLIENT_APK_ASSET`), but eyeball it on the Release page too.
+5. **Install / verify on device.** The published APK is directly installable and
+   installs *over* any prior version (same signing key), so testers just tap the
+   download link and update in place — no uninstall.
+
+### Signing (why no secret is needed)
+`build.gradle.kts` binds BOTH the `debug` and `release` buildTypes to a fixed,
+committed debug keystore (`app/debug.keystore`, `storePassword`/`keyPassword` =
+`android`). Because the key never changes, every CI build — and every local
+`./gradlew assembleRelease` — produces an APK with the SAME signature, so
+release updates install over each other (and over debug installs) without
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`. A committed debug keystore is standard
+practice for a sideloaded, non-Play-Store test build and is **not** a secret.
+Signing with the debug *key* does not make the build debuggable — release keeps
+`isDebuggable=false`. Switch to a secret-backed `signingConfigs.release` only
+before any Play Store submission.
