@@ -3,6 +3,7 @@ package com.tofu.client.session
 import com.tofu.client.data.AuthType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -90,5 +91,38 @@ class ServerUrlTest {
         assertEquals(AuthType.NONE, ServerUrl.defaultAuthType(""))
         // A non-numeric "proxy" segment is NOT the code-server shape.
         assertEquals(AuthType.NONE, ServerUrl.defaultAuthType("https://h.example.com/proxy/api/"))
+    }
+
+    // ── needsProxyAuthFix: upgrade-migration predicate ────────────────────
+
+    @Test
+    fun needsProxyAuthFix_true_only_for_proxy_url_stuck_on_none() {
+        // The upgrade case: a persisted /proxy/ profile stuck on the stale NONE
+        // default must be flagged for the flip to CODE_SERVER_PASSWORD.
+        // NEUTER CHECK: make needsProxyAuthFix always return false and the
+        // migration test (SessionControllerTest) leaves the row on NONE —
+        // reproducing the "upgraded proxy profile can't headless-login" bug.
+        assertTrue(
+            ServerUrl.needsProxyAuthFix(
+                "https://67dc97fd-vscode-shxstraining.mlp.sankuai.com/proxy/15000/",
+                AuthType.NONE,
+            ),
+        )
+    }
+
+    @Test
+    fun needsProxyAuthFix_false_for_bare_host_or_explicit_auth() {
+        // Bare host on NONE → leave alone (correct zero-config default).
+        assertEquals(false, ServerUrl.needsProxyAuthFix("https://tofu.example.com/", AuthType.NONE))
+        // Proxy URL already on CODE_SERVER_PASSWORD → nothing to fix (idempotent).
+        assertEquals(
+            false,
+            ServerUrl.needsProxyAuthFix("https://h/proxy/15000/", AuthType.CODE_SERVER_PASSWORD),
+        )
+        // Proxy URL on INTERACTIVE_SSO → an explicit non-default, leave alone.
+        assertEquals(
+            false,
+            ServerUrl.needsProxyAuthFix("https://h/proxy/15000/", AuthType.INTERACTIVE_SSO),
+        )
     }
 }

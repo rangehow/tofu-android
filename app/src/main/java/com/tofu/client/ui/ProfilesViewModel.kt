@@ -54,6 +54,16 @@ class ProfilesViewModel(
     var editing: Profile? = null
         private set
 
+    /**
+     * One-time upgrade migration, run once at app open: fix persisted proxy
+     * profiles stuck on the stale NONE default (see
+     * [SessionController.migrateProxyAuthDefaults]). Idempotent — safe every
+     * launch. The profiles Flow re-emits automatically after the DAO updates.
+     */
+    fun migrateOnLaunch() {
+        viewModelScope.launch { controller.migrateProxyAuthDefaults() }
+    }
+
     fun startAdd() { editing = null; _screen.value = Screen.AddEdit }
     fun startEdit(p: Profile) { editing = p; _screen.value = Screen.AddEdit }
     fun backToList() { _screen.value = Screen.List; _status.value = UiStatus.Idle }

@@ -177,4 +177,32 @@ class SessionControllerTest {
         assertNull("secret must be removed", vault.map["zw05"])
         assertTrue("row must be deleted", dao.deleted.contains(seed.id))
     }
+
+    @Test
+    fun migrate_flips_stale_proxy_none_leaves_others_untouched() = runTest {
+        // Three rows: a stale /proxy/ profile on NONE (must flip), a bare-host
+        // NONE (leave), and a proxy profile explicitly on INTERACTIVE_SSO (leave).
+        val dao = FakeDao(); val vault = FakeVault(); val sink = FakeCookieSink()
+        val proxyNone = Profile(id = 1, alias = "shanghai",
+            baseUrl = "https://abc-vscode-shxstraining.mlp.sankuai.com/proxy/15000/",
+            authType = AuthType.NONE)
+        val bareNone = Profile(id = 2, alias = "bare",
+            baseUrl = "https://tofu.example.com/", authType = AuthType.NONE)
+        val proxySso = Profile(id = 3, alias = "sso",
+            baseUrl = "https://h/proxy/8080/", authType = AuthType.INTERACTIVE_SSO)
+        dao.rows[1] = proxyNone; dao.rows[2] = bareNone; dao.rows[3] = proxySso
+        val ctl = SessionController(dao, vault, mgr(dao, vault, sink))
+
+        val fixed = ctl.migrateProxyAuthDefaults()
+
+        // NEUTER: make ServerUrl.needsProxyAuthFix return false and this fails
+        // — the stale Shanghai row stays on NONE and can't headless-login.
+        assertEquals("only the stale proxy row is fixed", 1, fixed)
+        assertEquals(AuthType.CODE_SERVER_PASSWORD, dao.rows[1]!!.authType)
+        assertEquals("bare host untouched", AuthType.NONE, dao.rows[2]!!.authType)
+        assertEquals("explicit SSO untouched", AuthType.INTERACTIVE_SSO, dao.rows[3]!!.authType)
+
+        // Idempotent: a second run fixes nothing.
+        assertEquals(0, ctl.migrateProxyAuthDefaults())
+    }
 }

@@ -68,5 +68,26 @@ data class ServerUrl(
         fun defaultAuthType(rawUrl: String): AuthType =
             if (PROXY_PATH.containsMatchIn(rawUrl.trim())) AuthType.CODE_SERVER_PASSWORD
             else AuthType.NONE
+
+        /**
+         * Predicate for the upgrade migration: is this a persisted profile
+         * whose URL is a code-server proxy form (`/proxy/<port>/`) but whose
+         * stored [current] auth is the stale NONE default? Such a row is a
+         * pre-v0.1.13 profile stuck on the old bare-Tofu default — it can never
+         * headless-login (login short-circuits NONE without sending the
+         * password, dumping the user on the code-server login page and leaving
+         * Start greyed forever). It must be flipped to CODE_SERVER_PASSWORD.
+         *
+         * Bare-host NONE rows return false (left untouched). NOTE: an
+         * explicitly user-chosen NONE on a proxy URL is INDISTINGUISHABLE from
+         * the stale default in the schema (both are just `authType=NONE`), so
+         * it is also flipped — acceptable because a deliberate NONE on a
+         * password-gated proxy is a non-functional config anyway.
+         *
+         * Pure and idempotent (after the flip, current != NONE → false).
+         */
+        fun needsProxyAuthFix(rawUrl: String, current: AuthType): Boolean =
+            current == AuthType.NONE &&
+                defaultAuthType(rawUrl) == AuthType.CODE_SERVER_PASSWORD
     }
 }

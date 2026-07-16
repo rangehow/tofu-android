@@ -129,6 +129,30 @@ class SessionController(
         return session.login(profile)
     }
 
+    /**
+     * One-time upgrade migration (idempotent, safe to run every launch): fix
+     * any persisted profile whose URL is a code-server proxy form but whose
+     * stored authType is the stale NONE default (see
+     * [ServerUrl.needsProxyAuthFix]) — flip it to CODE_SERVER_PASSWORD so it
+     * can headless-login instead of being stranded on the code-server login
+     * page with Start greyed forever. Returns the count of rows fixed.
+     *
+     * Only touches proxy+NONE rows; bare-host NONE and any non-NONE auth are
+     * left as-is. Runs over the DAO seam → unit-testable with fakes.
+     */
+    suspend fun migrateProxyAuthDefaults(): Int {
+        var fixed = 0
+        for (p in dao.getAllOnce()) {
+            if (ServerUrl.needsProxyAuthFix(p.baseUrl, p.authType)) {
+                dao.update(p.copy(authType = AuthType.CODE_SERVER_PASSWORD))
+                fixed++
+                Log.i(TAG, "migrateProxyAuthDefaults: fixed alias=%s NONE→CODE_SERVER_PASSWORD"
+                    .format(p.alias))
+            }
+        }
+        return fixed
+    }
+
     /** Delete a profile and its stored secret (never orphan a credential). */
     suspend fun deleteProfile(profile: Profile) {
         secrets.removeSecret(profile.alias)

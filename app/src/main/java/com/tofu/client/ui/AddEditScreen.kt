@@ -50,7 +50,17 @@ fun AddEditScreen(
     // stop auto-following the URL once they do (and never override an edit).
     var authTouched by remember { mutableStateOf(editing != null) }
     var auth by remember {
-        mutableStateOf(editing?.authType ?: ServerUrl.defaultAuthType(url))
+        mutableStateOf(
+            when {
+                editing == null -> ServerUrl.defaultAuthType(url)
+                // Edit-mode safety net: if a persisted profile is a proxy URL
+                // stuck on the stale NONE default, show the corrected type so
+                // the pencil reflects what the launch migration also fixes.
+                ServerUrl.needsProxyAuthFix(editing.baseUrl, editing.authType) ->
+                    AuthType.CODE_SERVER_PASSWORD
+                else -> editing.authType
+            },
+        )
     }
     var secret by remember { mutableStateOf("") }
     var projectPath by remember { mutableStateOf(editing?.projectPath ?: "") }

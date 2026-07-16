@@ -45,6 +45,9 @@ class MainActivity : ComponentActivity() {
         session = SessionManager(dao, secrets)
         val controller = SessionController(dao, secrets, session)
         vm = ProfilesViewModel(dao, secrets, controller)
+        // One-time upgrade fix: flip persisted /proxy/ profiles stuck on the
+        // stale NONE default to CODE_SERVER_PASSWORD so they headless-login.
+        vm.migrateOnLaunch()
 
         setContent {
             MaterialTheme {
