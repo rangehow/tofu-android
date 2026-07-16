@@ -146,4 +146,48 @@ class SessionManagerLoginDegradeTest {
         assertTrue("expected Success, got $result", result is LoginResult.Success)
         assertEquals(listOf("https://tofu.example.com"), cookies.injected)
     }
+
+    /** Interceptor that FAILS the test if any HTTP call is attempted. */
+    private class NoHttpAllowed : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response =
+            throw AssertionError(
+                "login() made an HTTP request for an AuthType.NONE profile: " +
+                chain.request().method + " " + chain.request().url,
+            )
+    }
+
+    @Test
+    fun none_profile_short_circuits_with_zero_http() = runTest {
+        // This is the CODE-LEVEL MIRROR of the real on-device path a user hits
+        // on a bare Tofu server: a new profile now defaults to AuthType.NONE
+        // (Profile.kt / AddEditScreen.kt), and SessionManager.login must return
+        // Success at the top (SessionManager.kt:53) WITHOUT sending any request
+        // — so it can never reach the code-server /login POST and can never
+        // surface the "302 No session cookie" error the user reported.
+        //
+        // NEUTER CHECK: delete the `if (profile.authType == AuthType.NONE)`
+        // short-circuit in SessionManager.login and this test fails — the
+        // NoHttpAllowed interceptor throws the moment login() issues the GET/POST
+        // handshake, exactly reproducing the pre-fix on-device failure path.
+        val cookies = FakeCookieSink()
+        val dao = FakeDao(profile())
+        val http = OkHttpClient.Builder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .addInterceptor(NoHttpAllowed())
+            .build()
+
+        val noneProfile = profile().copy(authType = AuthType.NONE)
+        // A NONE profile also has no stored secret; login must not need one.
+        val mgr = SessionManager(dao, FakeSecrets(null), cookies, http)
+
+        val result = mgr.login(noneProfile)
+
+        assertTrue("expected Success for NONE, got $result", result is LoginResult.Success)
+        assertEquals("bare Tofu host", "tofu.example.com",
+            (result as LoginResult.Success).host)
+        // No handshake ⇒ nothing injected, nothing stamped.
+        assertTrue("must not inject a cookie: ${cookies.injected}", cookies.injected.isEmpty())
+        assertTrue("must not stamp cookieHost: ${dao.updates}", dao.updates.isEmpty())
+    }
 }

@@ -270,6 +270,20 @@ newest tagged release published, so cutting a version IS the delivery.
    installs *over* any prior version (same signing key), so testers just tap the
    download link and update in place — no uninstall.
 
+   **Failure mode — signature mismatch.** Android refuses an in-place update
+   when the new APK is signed with a DIFFERENT key than the installed one,
+   failing with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` / "App not installed".
+   With the current setup this should never happen — every tag is signed with
+   the SAME committed `app/debug.keystore` (verify across two tags with
+   `git rev-parse v<old>:app/debug.keystore` == `git rev-parse
+   v<new>:app/debug.keystore`). It CAN happen if someone (a) migrated the
+   release to a secret-backed `signingConfigs.release`, or (b) the tester's
+   existing install came from a locally-built APK signed with a personal debug
+   key. **Fix:** uninstall the old app first, then install the new APK
+   (a one-time step; subsequent same-key updates install over each other
+   normally). Uninstalling clears the app's local data (saved profiles), which
+   on a fresh single-user setup is harmless.
+
 ### Signing (why no secret is needed)
 `build.gradle.kts` binds BOTH the `debug` and `release` buildTypes to a fixed,
 committed debug keystore (`app/debug.keystore`, `storePassword`/`keyPassword` =
