@@ -13,8 +13,8 @@ android {
         applicationId = "com.tofu.client"
         minSdk = 26          // API 26: EncryptedSharedPreferences + modern WebView
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.1.8"
+        versionCode = 10
+        versionName = "0.1.9"
     }
 
     signingConfigs {

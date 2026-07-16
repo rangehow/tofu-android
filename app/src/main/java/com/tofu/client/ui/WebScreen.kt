@@ -2,21 +2,29 @@ package com.tofu.client.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SmallFloatingActionButton
@@ -59,6 +67,55 @@ import kotlinx.coroutines.launch
  * permission (dangerous, so requested on first use via micLauncher). The
  * manifest permission alone is insufficient for either gate.
  */
+/**
+ * JS→native bridge for the one-click diagnostics FAB. The web collector
+ * (static/js/diag_collect.js → window.__tofuCollectDiagnostics) is async (it
+ * runs a live GET probe), so evaluateJavascript's synchronous return can't
+ * capture its result. Instead the FAB invokes the collector and pipes its
+ * resolved JSON string back through [onResult] via this @JavascriptInterface.
+ * Copying to the clipboard + the Toast happen on the native side so they work
+ * even when the SPA is wedged on the loading skeleton (the failure we diagnose).
+ */
+private class DiagBridge(val onResult: (String) -> Unit) {
+    @JavascriptInterface
+    fun deliver(json: String) { onResult(json) }
+}
+
+/** Copy [text] to the system clipboard and show a short confirmation Toast. */
+private fun copyToClipboard(ctx: Context, text: String) {
+    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    cm.setPrimaryClip(ClipData.newPlainText("Tofu diagnostics", text))
+    Toast.makeText(ctx, "Diagnostics copied — paste to the maintainer", Toast.LENGTH_LONG).show()
+}
+
+/**
+ * Fire the web collector and route its async result to the native clipboard.
+ * The collector returns a Promise<string>; we resolve it in-page and hand the
+ * string to the injected `TofuDiag.deliver(...)` bridge. If the collector is
+ * missing (old web build) or errors, we still copy a helpful marker so the
+ * user's tap is never a silent no-op.
+ */
+private fun collectAndCopyDiagnostics(wv: WebView?) {
+    if (wv == null) return
+    val js = """
+        (function(){
+          try {
+            if (typeof window.__tofuCollectDiagnostics !== 'function') {
+              TofuDiag.deliver('{"error":"diagnostics collector missing — web build predates diag_collect.js; Refresh once on a newer server build"}');
+              return;
+            }
+            Promise.resolve(window.__tofuCollectDiagnostics()).then(
+              function(s){ TofuDiag.deliver(String(s)); },
+              function(e){ TofuDiag.deliver('{"error":"collector rejected: '+(e&&e.message||e)+'"}'); }
+            );
+          } catch (e) {
+            TofuDiag.deliver('{"error":"collector threw: '+(e&&e.message||e)+'"}');
+          }
+        })();
+    """.trimIndent()
+    wv.evaluateJavascript(js, null)
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebScreen(
@@ -97,6 +154,15 @@ fun WebScreen(
                     // Remote-debuggable via chrome://inspect on a connected
                     // desktop — safe to leave on for a self-hosted tool.
                     WebView.setWebContentsDebuggingEnabled(true)
+                    // JS→native bridge for the diagnostics FAB. The collected
+                    // JSON is copied to the clipboard natively so it works even
+                    // when the SPA is wedged. Exposed as window.TofuDiag.
+                    addJavascriptInterface(
+                        DiagBridge { json ->
+                            scope.launch(Dispatchers.Main) { copyToClipboard(ctx, json) }
+                        },
+                        "TofuDiag",
+                    )
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true        // Tofu uses localStorage/IndexedDB
                     settings.databaseEnabled = true
@@ -193,18 +259,33 @@ fun WebScreen(
             },
         )
 
-        // Reload affordance the WebView shell has no other way to offer.
-        // Top-end + status-bar inset keeps it clear of the SPA's bottom input
-        // bar; low alpha so it stays unobtrusive over the chat.
-        SmallFloatingActionButton(
-            onClick = { webRef[0]?.reload() },
+        // Top-end affordance stack the WebView shell otherwise lacks (no
+        // address bar / menu). Status-bar inset + low alpha keep it clear of
+        // the SPA and unobtrusive over the chat.
+        //   • Refresh — reload the page (replaces the unusable pull-to-refresh).
+        //   • Copy diagnostics — collect client state + a live GET probe and
+        //     copy the JSON to the native clipboard so the user can paste it to
+        //     the maintainer in one tap. Native clipboard write means it works
+        //     even when the SPA is stuck on the "Fetching messages…" skeleton.
+        Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .statusBarsPadding()
-                .padding(12.dp)
-                .alpha(0.6f),
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(Icons.Filled.Refresh, contentDescription = "Reload")
+            SmallFloatingActionButton(
+                onClick = { webRef[0]?.reload() },
+                modifier = Modifier.alpha(0.6f),
+            ) {
+                Icon(Icons.Filled.Refresh, contentDescription = "Reload")
+            }
+            SmallFloatingActionButton(
+                onClick = { collectAndCopyDiagnostics(webRef[0]) },
+                modifier = Modifier.alpha(0.6f),
+            ) {
+                Icon(Icons.Filled.BugReport, contentDescription = "Copy diagnostics")
+            }
         }
 
     }
