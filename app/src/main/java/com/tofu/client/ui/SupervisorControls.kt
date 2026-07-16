@@ -83,6 +83,15 @@ fun SupervisorControls(
         }
     }
 
+    // Start/Stop/Refresh all call the supervisor, which is proxied by the SAME
+    // code-server as Tofu — so they need the code-server session cookie no
+    // matter what the profile's authType is. That cookie only exists after a
+    // successful Open (SessionManager stamps profile.cookieHost = host). Until
+    // then every supervisor call 401s, so gate the buttons and point the user
+    // at Open instead of letting them hit an error.
+    val loggedIn = profile.cookieHost != null &&
+        profile.cookieHost == ServerUrl.parse(profile.baseUrl)?.host
+
     Column(modifier) {
         Row(
             Modifier.padding(horizontal = 8.dp),
@@ -94,9 +103,15 @@ fun SupervisorControls(
                 null -> "—"
             }
             Text("Server: $label", Modifier.padding(end = 8.dp))
-            Button(onClick = { run("start") }, enabled = !busy) { Text("Start") }
-            TextButton(onClick = { run("stop") }, enabled = !busy) { Text("Stop") }
-            TextButton(onClick = { run("status") }, enabled = !busy) { Text("Refresh") }
+            Button(onClick = { run("start") }, enabled = !busy && loggedIn) { Text("Start") }
+            TextButton(onClick = { run("stop") }, enabled = !busy && loggedIn) { Text("Stop") }
+            TextButton(onClick = { run("status") }, enabled = !busy && loggedIn) { Text("Refresh") }
+        }
+        if (!loggedIn) {
+            Text(
+                "Tap Open first to sign in, then Start/Stop become available.",
+                Modifier.padding(horizontal = 8.dp),
+            )
         }
         message?.let { Text(it, Modifier.padding(horizontal = 8.dp)) }
     }

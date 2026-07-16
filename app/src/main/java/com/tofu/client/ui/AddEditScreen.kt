@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.tofu.client.data.AuthType
 import com.tofu.client.data.Profile
 import com.tofu.client.session.ProfileForm
+import com.tofu.client.session.ServerUrl
 
 /**
  * Add / edit-server form. Field state is local; validation runs through the
@@ -43,9 +44,21 @@ fun AddEditScreen(
 ) {
     var alias by remember { mutableStateOf(editing?.alias ?: "") }
     var url by remember { mutableStateOf(editing?.baseUrl ?: "") }
-    var auth by remember { mutableStateOf(editing?.authType ?: AuthType.NONE) }
+    // Auth defaults are URL-aware for NEW profiles: a `/proxy/<port>/` URL is
+    // behind a code-server password gate → CODE_SERVER_PASSWORD; a bare host →
+    // NONE. We track whether the user has manually overridden the picker so we
+    // stop auto-following the URL once they do (and never override an edit).
+    var authTouched by remember { mutableStateOf(editing != null) }
+    var auth by remember {
+        mutableStateOf(editing?.authType ?: ServerUrl.defaultAuthType(url))
+    }
     var secret by remember { mutableStateOf("") }
     var projectPath by remember { mutableStateOf(editing?.projectPath ?: "") }
+    // Until the user picks an auth type by hand, keep it in sync with the URL
+    // they're typing (add-mode only).
+    LaunchedEffect(url) {
+        if (!authTouched) auth = ServerUrl.defaultAuthType(url)
+    }
     // Host whose saved password would be reused if the field is left blank.
     var reuseHost by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(url, auth, editing?.alias) {
@@ -85,7 +98,7 @@ fun AddEditScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            AuthTypePicker(auth) { auth = it }
+            AuthTypePicker(auth) { authTouched = true; auth = it }
 
             // Optional host path of the project this server runs from. When set,
             // the WebView screen shows Start/Stop controls that drive the

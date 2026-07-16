@@ -82,7 +82,11 @@ class SupervisorUrlTest {
     @Test
     fun explain_404_and_401_are_specific() {
         assertTrue(SupervisorUrl.explainFailure(404, "x").contains("older version"))
-        assertTrue(SupervisorUrl.explainFailure(401, "x").contains("re-authenticate"))
+        // 401 must NOT claim "expired" (the user may never have logged in) and
+        // must steer them to Open — the fix for the reported misleading copy.
+        val msg401 = SupervisorUrl.explainFailure(401, "x")
+        assertTrue("401 must point at Open: $msg401", msg401.contains("Open"))
+        assertTrue("401 must not say expired: $msg401", !msg401.contains("expired"))
     }
 
     @Test

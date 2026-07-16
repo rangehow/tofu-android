@@ -90,8 +90,8 @@ data class SupervisorUrl(
                 "path to TOFU_SUPERVISOR_PROJECTS and restart the supervisor " +
                 "(./supervisor.sh install), then try again."
             code == 401 ->
-                "The code-server session expired. Open the server once to " +
-                "re-authenticate, then retry Start/Stop."
+                "Not signed in to this server yet — tap Open first to log in " +
+                "with your saved password, then retry Start/Stop."
             code == 0 ->
                 "Couldn't reach the supervisor: $rawMessage. Check the server URL " +
                 "and that the supervisor daemon is running on the host."

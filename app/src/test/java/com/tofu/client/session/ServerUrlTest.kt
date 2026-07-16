@@ -1,5 +1,6 @@
 package com.tofu.client.session
 
+import com.tofu.client.data.AuthType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -57,5 +58,37 @@ class ServerUrlTest {
     fun parse_rejects_non_absolute_url() {
         assertNull(ServerUrl.parse("not a url"))
         assertNull(ServerUrl.parse("ftp://host/x"))
+    }
+
+    // ── defaultAuthType: URL-aware zero-config auth default ───────────────
+
+    @Test
+    fun defaultAuthType_proxy_url_is_code_server_password() {
+        // A `/proxy/<port>/` URL sits behind the code-server password gate, so
+        // the app must replay the stored password rather than short-circuit.
+        // NEUTER CHECK: make defaultAuthType always return AuthType.NONE and
+        // this fails — reproducing the reported bug where a bare-NONE default
+        // dumped the user on the code-server login page instead of auto-login.
+        assertEquals(AuthType.CODE_SERVER_PASSWORD, ServerUrl.defaultAuthType(sandbox))
+        assertEquals(
+            AuthType.CODE_SERVER_PASSWORD,
+            ServerUrl.defaultAuthType("https://tofu.example.com/proxy/15000/"),
+        )
+        // Trailing-slash-less proxy path still counts.
+        assertEquals(
+            AuthType.CODE_SERVER_PASSWORD,
+            ServerUrl.defaultAuthType("https://h.example.com/proxy/8080"),
+        )
+    }
+
+    @Test
+    fun defaultAuthType_bare_host_is_none() {
+        // Directly-exposed Tofu (no proxy subpath) → NONE, so bare single-user
+        // deployments stay zero-config and skip the handshake.
+        assertEquals(AuthType.NONE, ServerUrl.defaultAuthType("https://tofu.example.com/"))
+        assertEquals(AuthType.NONE, ServerUrl.defaultAuthType("http://192.168.1.9:15000/"))
+        assertEquals(AuthType.NONE, ServerUrl.defaultAuthType(""))
+        // A non-numeric "proxy" segment is NOT the code-server shape.
+        assertEquals(AuthType.NONE, ServerUrl.defaultAuthType("https://h.example.com/proxy/api/"))
     }
 }

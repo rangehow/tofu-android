@@ -1,5 +1,6 @@
 package com.tofu.client.session
 
+import com.tofu.client.data.AuthType
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -46,5 +47,26 @@ data class ServerUrl(
             val u = raw.trim().toHttpUrlOrNull() ?: return null
             return ServerUrl(raw = raw, httpUrl = u)
         }
+
+        // A code-server proxy path: `/proxy/<port>/…`. Its presence means the
+        // whole origin sits behind code-server's `--auth password` gate, so the
+        // app must replay the stored password (CODE_SERVER_PASSWORD). A bare
+        // `host:port` URL (no proxy subpath) is a directly-exposed Tofu with no
+        // such gate, so NONE (skip the handshake, let Tofu's own `open` mode /
+        // the WebView handle any auth) is the right zero-config default.
+        private val PROXY_PATH = Regex("""/proxy/\d+(/|$)""")
+
+        /**
+         * Pick the sensible default [AuthType] for a freshly-typed server URL,
+         * so a new profile works out-of-the-box without the user touching the
+         * auth picker:
+         *  - code-server proxy URL (`…/proxy/15000/`) → [AuthType.CODE_SERVER_PASSWORD]
+         *  - anything else (bare host, unparseable-so-far) → [AuthType.NONE]
+         *
+         * Pure and deterministic — unit-tested off-device.
+         */
+        fun defaultAuthType(rawUrl: String): AuthType =
+            if (PROXY_PATH.containsMatchIn(rawUrl.trim())) AuthType.CODE_SERVER_PASSWORD
+            else AuthType.NONE
     }
 }
