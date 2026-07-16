@@ -59,5 +59,43 @@ data class SupervisorUrl(
 
         private fun HttpUrlDefaultPort(scheme: String): Int =
             if (scheme == "https") 443 else 80
+
+        /**
+         * Turn an opaque supervisor call failure (HTTP status + raw message)
+         * into an ACTIONABLE, human-readable explanation the app can show.
+         *
+         * The most common failure is a 5xx from the code-server proxy: that
+         * means nothing is listening on the `…/proxy/$SUPERVISOR_PORT` port,
+         * i.e. the always-on `supervisor.py` daemon is NOT running on the host.
+         * supervisor.py itself never emits 5xx (only 200/403/404), so a 5xx is
+         * definitionally "the daemon isn't up", not a supervisor bug — and the
+         * fix lives on the host, so we tell the user exactly what to run.
+         *
+         * Kept pure (no Android types) so it is unit-testable off-device.
+         */
+        fun explainFailure(code: Int, rawMessage: String): String = when {
+            code in 500..599 ->
+                "The start/stop daemon isn't responding (HTTP $code). This almost " +
+                "always means supervisor.py (proxied on port $SUPERVISOR_PORT) is " +
+                "not running on the host — a 5xx comes from the proxy when nothing " +
+                "is listening there, not from the supervisor itself. On the host, " +
+                "start it once with:  ./supervisor.sh install  (systemd, keeps it " +
+                "always-on). Until it runs, Start/Stop can't work."
+            code == 404 ->
+                "Supervisor endpoint not found (HTTP 404). The daemon may be an " +
+                "older version, or nothing is serving the /proxy/$SUPERVISOR_PORT " +
+                "path. Check that supervisor.py is running on the host."
+            code == 403 ->
+                "This project path isn't allow-listed on the host. Add its absolute " +
+                "path to TOFU_SUPERVISOR_PROJECTS and restart the supervisor " +
+                "(./supervisor.sh install), then try again."
+            code == 401 ->
+                "The code-server session expired. Open the server once to " +
+                "re-authenticate, then retry Start/Stop."
+            code == 0 ->
+                "Couldn't reach the supervisor: $rawMessage. Check the server URL " +
+                "and that the supervisor daemon is running on the host."
+            else -> rawMessage
+        }
     }
 }

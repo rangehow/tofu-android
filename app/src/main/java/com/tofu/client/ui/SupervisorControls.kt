@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tofu.client.data.Profile
 import com.tofu.client.session.SupervisorClient
+import com.tofu.client.session.SupervisorUrl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -72,7 +73,10 @@ fun SupervisorControls(
                     }
                 }
                 is SupervisorClient.Result.Failed -> {
-                    message = res.message
+                    // Map the opaque HTTP status (most often a 5xx from the
+                    // code-server proxy when supervisor.py isn't running) into
+                    // an actionable explanation instead of a bare "HTTP 500".
+                    message = SupervisorUrl.explainFailure(res.code, res.message)
                 }
             }
             busy = false

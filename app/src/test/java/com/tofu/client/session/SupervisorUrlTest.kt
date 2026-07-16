@@ -2,6 +2,7 @@ package com.tofu.client.session
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Pure JVM tests for the supervisor URL derivation (no device needed). */
@@ -53,5 +54,46 @@ class SupervisorUrlTest {
             "https://h.example/proxy/15001/stop",
             SupervisorUrl.endpoint(su, SupervisorUrl.STOP, null),
         )
+    }
+
+    // ── explainFailure: opaque HTTP status → actionable guidance ──────────
+
+    @Test
+    fun explain_5xx_points_at_supervisor_not_running() {
+        // The reported "HTTP 500 on Start" case: a 5xx is the code-server proxy
+        // saying nothing listens on /proxy/15001 — i.e. supervisor.py is down.
+        // NEUTER CHECK: make the `code in 500..599` branch fall through to
+        // `else -> rawMessage` and this fails — the user would see a bare
+        // "HTTP 500" with no remedy instead of the install instruction.
+        val msg = SupervisorUrl.explainFailure(500, "HTTP 500")
+        assertTrue("must name the daemon: $msg", msg.contains("supervisor.py"))
+        assertTrue("must give the fix: $msg", msg.contains("supervisor.sh install"))
+        assertTrue("must cite the port: $msg", msg.contains(SupervisorUrl.SUPERVISOR_PORT))
+        // A different 5xx (502/503 from the proxy) maps the same way.
+        assertTrue(SupervisorUrl.explainFailure(503, "x").contains("supervisor.py"))
+    }
+
+    @Test
+    fun explain_403_points_at_allowlist() {
+        val msg = SupervisorUrl.explainFailure(403, "projectPath not in allow-list")
+        assertTrue(msg.contains("TOFU_SUPERVISOR_PROJECTS"))
+    }
+
+    @Test
+    fun explain_404_and_401_are_specific() {
+        assertTrue(SupervisorUrl.explainFailure(404, "x").contains("older version"))
+        assertTrue(SupervisorUrl.explainFailure(401, "x").contains("re-authenticate"))
+    }
+
+    @Test
+    fun explain_network_error_uses_raw_message() {
+        // code==0 is our sentinel for a transport failure (no HTTP response).
+        val msg = SupervisorUrl.explainFailure(0, "timeout")
+        assertTrue("must surface the cause: $msg", msg.contains("timeout"))
+    }
+
+    @Test
+    fun explain_unknown_code_passes_through_raw() {
+        assertEquals("weird", SupervisorUrl.explainFailure(418, "weird"))
     }
 }

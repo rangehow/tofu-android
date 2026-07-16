@@ -44,7 +44,7 @@ data class Profile(
     @ColumnInfo(name = "alias") val alias: String,
     @ColumnInfo(name = "instance_uuid") val instanceUuid: String? = null,
     @ColumnInfo(name = "base_url") val baseUrl: String,
-    @ColumnInfo(name = "auth_type") val authType: AuthType = AuthType.CODE_SERVER_PASSWORD,
+    @ColumnInfo(name = "auth_type") val authType: AuthType = AuthType.NONE,
     @ColumnInfo(name = "cookie_host") val cookieHost: String? = null,
     @ColumnInfo(name = "last_used_at") val lastUsedAt: Long = 0,
     /**

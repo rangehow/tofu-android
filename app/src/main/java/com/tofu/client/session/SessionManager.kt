@@ -87,7 +87,19 @@ class SessionManager(
                         Cookie.parse(server.httpUrl, raw)
                     }.filter { it.name == SESSION_COOKIE }
                     if (sessionCookies.isEmpty()) {
-                        return@withContext LoginResult.Error("302 without session cookie")
+                        // A 302 that carries cookies but none of them is the
+                        // code-server session cookie means this server is not
+                        // gated by a code-server password we can replay (bare
+                        // Tofu, a different gate, or a changed login form). This
+                        // is NOT a failure: don't hard-Error and strand the user
+                        // on the profile list. Degrade gracefully — skip the
+                        // headless handshake and let WebScreen load baseUrl so
+                        // the server's own login page / ReauthWebViewClient can
+                        // take over inside the WebView if auth is really needed.
+                        Log.i(TAG, "login: 302 without $SESSION_COOKIE for " +
+                            "alias=${profile.alias} host=${server.host}; " +
+                            "no code-server gate to replay, deferring to WebView")
+                        return@withContext LoginResult.Success(server.host)
                     }
                     cookies.inject(server.origin, sessionCookies)
                     dao.update(profile.copy(cookieHost = server.host))

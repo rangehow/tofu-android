@@ -43,7 +43,7 @@ fun AddEditScreen(
 ) {
     var alias by remember { mutableStateOf(editing?.alias ?: "") }
     var url by remember { mutableStateOf(editing?.baseUrl ?: "") }
-    var auth by remember { mutableStateOf(editing?.authType ?: AuthType.CODE_SERVER_PASSWORD) }
+    var auth by remember { mutableStateOf(editing?.authType ?: AuthType.NONE) }
     var secret by remember { mutableStateOf("") }
     var projectPath by remember { mutableStateOf(editing?.projectPath ?: "") }
     // Host whose saved password would be reused if the field is left blank.

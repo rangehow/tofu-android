@@ -58,22 +58,27 @@ echo "== TIER 1: pure-JVM =="
   "$SRC/main/java/com/tofu/client/session/ProfileForm.kt" \
   "$SRC/main/java/com/tofu/client/session/SessionManager.kt" \
   "$SRC/main/java/com/tofu/client/session/SessionController.kt" \
+  "$SRC/main/java/com/tofu/client/session/SupervisorUrl.kt" \
   "$SRC/main/java/com/tofu/client/data/Profile.kt" \
   "$OUT/stub/CookieBridgeStub.kt" \
   "$SRC/test/java/com/tofu/client/session/ServerUrlTest.kt" \
   "$SRC/test/java/com/tofu/client/session/LoginFormTest.kt" \
   "$SRC/test/java/com/tofu/client/session/CookieHeadersTest.kt" \
   "$SRC/test/java/com/tofu/client/session/SessionManagerReauthTest.kt" \
+  "$SRC/test/java/com/tofu/client/session/SessionManagerLoginDegradeTest.kt" \
   "$SRC/test/java/com/tofu/client/session/ProfileFormTest.kt" \
-  "$SRC/test/java/com/tofu/client/session/SessionControllerTest.kt"
+  "$SRC/test/java/com/tofu/client/session/SessionControllerTest.kt" \
+  "$SRC/test/java/com/tofu/client/session/SupervisorUrlTest.kt"
 
 "$JAVA_HOME/bin/java" -cp "$CP:$KRT:$OUT" org.junit.runner.JUnitCore \
   com.tofu.client.session.ServerUrlTest \
   com.tofu.client.session.LoginFormTest \
   com.tofu.client.session.CookieHeadersTest \
   com.tofu.client.session.SessionManagerReauthTest \
+  com.tofu.client.session.SessionManagerLoginDegradeTest \
   com.tofu.client.session.ProfileFormTest \
-  com.tofu.client.session.SessionControllerTest
+  com.tofu.client.session.SessionControllerTest \
+  com.tofu.client.session.SupervisorUrlTest
 
 # ── TIER 2: Robolectric (optional — needs the instrumented android-all jar) ──
 INSTRUMENTED="$(ls "$LIBS"/android-all-instrumented-*.jar 2>/dev/null | head -1 || true)"
