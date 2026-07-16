@@ -5,12 +5,15 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.widget.Toast
@@ -140,6 +143,29 @@ fun WebScreen(
         }
     }
 
+    // The SPA's "+" attach button triggers <input type="file">.click(). A
+    // WebView does NOT open a system picker for that on its own — the host must
+    // implement onShowFileChooser and launch an intent itself. The pending
+    // ValueCallback is parked here until the picker returns, mirroring the mic
+    // flow above. CRITICAL: the callback MUST be invoked exactly once (with the
+    // selected URIs, or null on cancel); leaving it pending permanently wedges
+    // the <input> so it can never reopen.
+    val pendingFileCallback = remember { arrayOfNulls<ValueCallback<Array<Uri>>>(1) }
+    val fileChooserLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val cb = pendingFileCallback[0]
+        pendingFileCallback[0] = null
+        if (cb != null) {
+            val uris = if (result.resultCode == android.app.Activity.RESULT_OK) {
+                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+            } else {
+                null
+            }
+            cb.onReceiveValue(uris)
+        }
+    }
+
     BackHandler {
         val wv = webRef[0]
         if (wv != null && wv.canGoBack()) wv.goBack() else onBack()
@@ -196,6 +222,65 @@ fun WebScreen(
                                     "(${m.sourceId()}:${m.lineNumber()})",
                             )
                             return true
+                        }
+
+                        override fun onShowFileChooser(
+                            webView: WebView,
+                            filePathCallback: ValueCallback<Array<Uri>>,
+                            fileChooserParams: FileChooserParams,
+                        ): Boolean {
+                            // Discard any stale callback from a picker that was
+                            // never resolved (defensive — should not happen).
+                            pendingFileCallback[0]?.onReceiveValue(null)
+                            pendingFileCallback[0] = filePathCallback
+                            val intent = try {
+                                fileChooserParams.createIntent()
+                            } catch (e: Exception) {
+                                Log.w("TofuFileChooser", "createIntent failed: ${e.message}")
+                                null
+                            }
+                            if (intent == null) {
+                                pendingFileCallback[0] = null
+                                return false
+                            }
+                            // Honor the SPA input's `multiple` attribute.
+                            if (fileChooserParams.mode ==
+                                FileChooserParams.MODE_OPEN_MULTIPLE
+                            ) {
+                                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                            }
+                            // The SPA's #fileInput `accept` mixes dozens of bare
+                            // extensions (.pdf/.docx/.py/.md…) that are NOT valid
+                            // MIME types. createIntent() copies acceptTypes into
+                            // intent.type verbatim; some OEM pickers, handed a
+                            // token they can't parse, filter the list down to
+                            // images-only or to nothing — the window opens but
+                            // no PDF/doc is selectable. So when any accept token
+                            // is non-standard, widen intent.type to */* and pass
+                            // the *valid* MIME hints via EXTRA_MIME_TYPES (capable
+                            // pickers still narrow; broken ones show everything).
+                            val acceptTypes = fileChooserParams.acceptTypes
+                                ?.filter { it.isNotBlank() }
+                                .orEmpty()
+                            val hasNonStandard = acceptTypes.any { !it.contains('/') }
+                            if (hasNonStandard) {
+                                intent.type = "*/*"
+                                val mimeHints = acceptTypes
+                                    .filter { it.contains('/') }
+                                    .toTypedArray()
+                                if (mimeHints.isNotEmpty()) {
+                                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeHints)
+                                }
+                            }
+                            return try {
+                                fileChooserLauncher.launch(intent)
+                                true
+                            } catch (e: Exception) {
+                                Log.w("TofuFileChooser", "launch failed: ${e.message}")
+                                pendingFileCallback[0] = null
+                                filePathCallback.onReceiveValue(null)
+                                false
+                            }
                         }
 
                         override fun onPermissionRequest(request: PermissionRequest) {

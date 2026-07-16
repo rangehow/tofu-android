@@ -162,6 +162,20 @@ Then in the app: edit the server → set **Project path** to the same absolute
 path → open it from the server list → use the **Start / Stop** controls.
 
 ## Open items
+- **File upload — needs on-device confirmation** (2026-07-16): the "+" attach
+  button in the SPA triggers a native `<input type="file">`, which a WebView will
+  NOT turn into a system picker unless the host implements
+  `WebChromeClient.onShowFileChooser`. That override was missing, so the upload
+  window never opened in the app (Chrome worked). Fixed in `WebScreen.kt`
+  (parks the `ValueCallback`, launches `FileChooserParams.createIntent()`, honors
+  `multiple`, always resolves the callback — null on cancel/error — so the input
+  can never wedge). NOT yet built/installed here (no network for Gradle);
+  confirm on a tablet: tap "+" → picker opens → a selection yields a preview card
+  → cancel-then-reopen works.
+- **Camera capture (separate ticket)**: `<input accept="image/*">` can request a
+  camera-capture intent; `createIntent()` covers the gallery/document path but a
+  "take a photo" flow additionally needs `MediaStore.ACTION_IMAGE_CAPTURE` + a
+  FileProvider. Not required for attach-existing-files; deferred.
 - **Cellular layer-1** (needs a phone): confirm a phone on cellular lands on the
   password page (fast path) vs an SSO screen (`AuthType.INTERACTIVE_SSO` handles
   it — WebView completes SSO once, jar persisted).
