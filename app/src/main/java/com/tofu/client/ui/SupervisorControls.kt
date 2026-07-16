@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tofu.client.data.Profile
+import com.tofu.client.session.ServerUrl
 import com.tofu.client.session.SupervisorClient
 import com.tofu.client.session.SupervisorUrl
 import kotlinx.coroutines.CoroutineScope
