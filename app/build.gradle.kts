@@ -13,8 +13,8 @@ android {
         applicationId = "com.tofu.client"
         minSdk = 26          // API 26: EncryptedSharedPreferences + modern WebView
         targetSdk = 34
-        versionCode = 10
-        versionName = "0.1.9"
+        versionCode = 11
+        versionName = "0.1.10"
     }
 
     signingConfigs {
@@ -64,7 +64,13 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
-    buildFeatures { compose = true }
+    // buildConfig=true generates com.tofu.client.BuildConfig with VERSION_NAME /
+    // VERSION_CODE (off by default in AGP 8+), consumed by the home-screen
+    // version footer so the shipped version is visible in-app.
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     // Robolectric needs the merged Android resources; isReturnDefaultValues lets
     // the NON-Robolectric pure-JVM tests call android.util.Log (used by

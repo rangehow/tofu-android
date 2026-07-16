@@ -1,6 +1,7 @@
 package com.tofu.client.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,8 +27,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tofu.client.BuildConfig
 import com.tofu.client.data.Profile
 import kotlinx.coroutines.CoroutineScope
 
@@ -59,20 +62,43 @@ fun ProfileListScreen(
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             StatusBanner(status)
-            if (profiles.isEmpty()) {
-                EmptyState()
-            } else {
-                LazyColumn(
-                    Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(profiles, key = { it.id }) { p ->
-                        ProfileRow(p, onActivate, onEdit, onDelete, scope)
+            // Weighted content area so the version footer below stays pinned to
+            // the bottom instead of being pushed off-screen by fillMaxSize().
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                if (profiles.isEmpty()) {
+                    EmptyState()
+                } else {
+                    LazyColumn(
+                        Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(profiles, key = { it.id }) { p ->
+                            ProfileRow(p, onActivate, onEdit, onDelete, scope)
+                        }
                     }
                 }
             }
+            VersionFooter()
         }
     }
+}
+
+/**
+ * App version footer, pinned at the bottom of the home screen. Reads
+ * [BuildConfig.VERSION_NAME] / [BuildConfig.VERSION_CODE] (generated from the
+ * versionName / versionCode in build.gradle.kts) so the shipped build is always
+ * identifiable in-app — no About dialog to open, and it can never drift from
+ * the manifest because it comes from the same source.
+ */
+@Composable
+private fun VersionFooter() {
+    Text(
+        "Tofu v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+        Modifier.fillMaxWidth().padding(12.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable
