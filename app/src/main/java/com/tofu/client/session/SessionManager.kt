@@ -108,8 +108,24 @@ class SessionManager(
                 }
 
                 // code-server re-serves the login page (200) on a bad password.
+                // Keep that as the confirmed BadCredentials signal so the user
+                // sees "wrong password" rather than being silently dropped into
+                // the WebView.
                 if (resp.code == 200) return@withContext LoginResult.BadCredentials
-                return@withContext LoginResult.Error("Unexpected status ${resp.code}")
+                // ANY other status is an outcome we cannot confirm as either a
+                // replayable code-server gate (302 handled above) or a bad
+                // password (200). A bare Tofu server returns 401 HTML when
+                // unauthenticated; a fronting gateway may answer 4xx/5xx; a
+                // changed code-server may respond differently. Same posture as
+                // the 302-without-cookie branch: do NOT hard-Error and strand
+                // the user on the profile list — degrade gracefully, letting
+                // WebScreen load baseUrl so the server's own login page /
+                // ReauthWebViewClient can take over. Hard Error is reserved for
+                // real transport/network failure (the catch below).
+                Log.i(TAG, "login: unconfirmed status ${resp.code} for " +
+                    "alias=${profile.alias} host=${server.host}; " +
+                    "no replayable code-server gate, deferring to WebView")
+                return@withContext LoginResult.Success(server.host)
             }
         } catch (e: Exception) {
             Log.w(TAG, "login failed alias=${profile.alias}: ${e.message}")

@@ -156,6 +156,88 @@ class SessionManagerLoginDegradeTest {
             )
     }
 
+    /**
+     * A bare Tofu server (no code-server gate) answers the password POST with
+     * 401 HTML when unauthenticated — a NON-302, NON-200 status. The GET form
+     * probe still returns 200 so the login URL falls back to the origin root.
+     */
+    private class BareTofu401Gate : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response {
+            val req = chain.request()
+            val b = Response.Builder().request(req).protocol(Protocol.HTTP_1_1)
+            return if (req.method == "POST") {
+                b.code(401).message("Unauthorized")
+                    .body("<html>unauthorized</html>".toResponseBody("text/html".toMediaType()))
+                    .build()
+            } else {
+                b.code(200).message("OK")
+                    .body("<html></html>".toResponseBody("text/html".toMediaType()))
+                    .build()
+            }
+        }
+    }
+
+    @Test
+    fun non_302_non_200_status_degrades_to_success() = runTest {
+        // A CODE_SERVER_PASSWORD profile pointed at a server that is NOT a
+        // standard code-server gate (bare Tofu → 401, a fronting gateway →
+        // 4xx/5xx). The password replay reaches neither the 302-success branch
+        // nor the 200=BadCredentials signal, so the login method must degrade
+        // gracefully to Success (defer to WebView) — NOT hard-Error and strand
+        // the user on the profile list.
+        //
+        // NEUTER CHECK: restore the old
+        // `return@withContext LoginResult.Error("Unexpected status ${resp.code}")`
+        // and this assertion fails — the user hits an "Unexpected status 401"
+        // hard error instead of loading the WebView.
+        val cookies = FakeCookieSink()
+        val dao = FakeDao(profile())
+        val http = OkHttpClient.Builder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .addInterceptor(BareTofu401Gate())
+            .build()
+
+        val mgr = SessionManager(dao, FakeSecrets("pw"), cookies, http)
+
+        val result = mgr.login(profile())
+
+        assertTrue("expected graceful Success on 401, got $result",
+            result is LoginResult.Success)
+        // Nothing to inject/stamp: there was no replayable session cookie.
+        assertTrue("must not inject a cookie: ${cookies.injected}", cookies.injected.isEmpty())
+        assertTrue("must not stamp cookieHost: ${dao.updates}", dao.updates.isEmpty())
+    }
+
+    @Test
+    fun bad_password_200_still_reports_bad_credentials() = runTest {
+        // Anti-neuter for the degrade change: the 200=BadCredentials signal
+        // must survive. A code-server that re-serves the login page (200) on a
+        // wrong password must still surface BadCredentials — NOT be swallowed
+        // into a defer-to-WebView Success by the new fall-through.
+        val cookies = FakeCookieSink()
+        val dao = FakeDao(profile())
+        val badPwGate = object : Interceptor {
+            override fun intercept(chain: Interceptor.Chain): Response {
+                val req = chain.request()
+                val b = Response.Builder().request(req).protocol(Protocol.HTTP_1_1)
+                return b.code(200).message("OK")
+                    .body("<html>login</html>".toResponseBody("text/html".toMediaType()))
+                    .build()
+            }
+        }
+        val http = OkHttpClient.Builder()
+            .followRedirects(false).followSslRedirects(false)
+            .addInterceptor(badPwGate).build()
+
+        val mgr = SessionManager(dao, FakeSecrets("pw"), cookies, http)
+
+        val result = mgr.login(profile())
+
+        assertTrue("expected BadCredentials on 200, got $result",
+            result is LoginResult.BadCredentials)
+    }
+
     @Test
     fun none_profile_short_circuits_with_zero_http() = runTest {
         // This is the CODE-LEVEL MIRROR of the real on-device path a user hits
