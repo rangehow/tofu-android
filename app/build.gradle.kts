@@ -80,6 +80,19 @@ android {
         unitTests {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
+            // Robolectric downloads its `android-all-instrumented` runtime jar
+            // from Maven at test time via its OWN resolver, which ignores the
+            // http_proxy env var and fails with UnknownHostException on a
+            // network-restricted machine. Point it at the pre-fetched jars in
+            // .testharness/libs (populated by fetch-test-deps.sh) and force
+            // offline mode so tests run with zero network.
+            all {
+                it.systemProperty("robolectric.offline", "true")
+                it.systemProperty(
+                    "robolectric.dependency.dir",
+                    rootProject.file(".testharness/libs").absolutePath
+                )
+            }
         }
     }
     // The Compose Compiler version is now governed by the
