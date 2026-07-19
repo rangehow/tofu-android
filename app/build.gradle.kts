@@ -13,8 +13,8 @@ android {
         applicationId = "com.tofu.client"
         minSdk = 26          // API 26: EncryptedSharedPreferences + modern WebView
         targetSdk = 34
-        versionCode = 15
-        versionName = "0.1.14"
+        versionCode = 16
+        versionName = "0.1.15"
     }
 
     signingConfigs {
@@ -83,15 +83,23 @@ android {
             // Robolectric downloads its `android-all-instrumented` runtime jar
             // from Maven at test time via its OWN resolver, which ignores the
             // http_proxy env var and fails with UnknownHostException on a
-            // network-restricted machine. Point it at the pre-fetched jars in
-            // .testharness/libs (populated by fetch-test-deps.sh) and force
-            // offline mode so tests run with zero network.
-            all {
-                it.systemProperty("robolectric.offline", "true")
-                it.systemProperty(
-                    "robolectric.dependency.dir",
-                    rootProject.file(".testharness/libs").absolutePath
-                )
+            // network-restricted machine. When the pre-fetched jars exist
+            // locally (.testharness/libs, populated by fetch-test-deps.sh),
+            // point Robolectric at them and force offline so tests run with
+            // zero network. That dir is NOT committed, so on CI (fresh runner,
+            // has network) it is absent — we then skip these properties and let
+            // Robolectric resolve its runtime jar online via the default
+            // resolver. Forcing offline unconditionally would break CI's
+            // `./gradlew test` (offline + no local jar = resolution failure).
+            val harnessLibs = rootProject.file(".testharness/libs")
+            if (harnessLibs.isDirectory) {
+                all {
+                    it.systemProperty("robolectric.offline", "true")
+                    it.systemProperty(
+                        "robolectric.dependency.dir",
+                        harnessLibs.absolutePath
+                    )
+                }
             }
         }
     }
